@@ -1,0 +1,17 @@
+Ripplebase To Do
+----------------
+
+Client API
+----------
+
+o Make 404 Not Found and 500 Server Error pages return valid JSON.
+
+o Copy json module from ripplebase_old django stuff
+
+o Do db-accessing work in thread
+
+o Generify render_* methods in resource
+  o Might set content-type there?
+
+o Make every request a transaction?
+  o Commit transaction when request is successful
