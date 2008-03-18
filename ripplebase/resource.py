@@ -24,14 +24,11 @@ class ObjectResource(json.JSONResource):
     def render_GET(self, request):
         "Return object data."
         key = unicode(request.prepath[-1])
-        return json.encode(self.get_obj(key))
+        return json.encode(self.get(key))
 
-    def get_obj(self, key):
+    def get(self, *keys):
         "Returns data_dict for object."
-        # *** replace with actual client
-        from ripplebase import settings
-        client = settings.TEST_CLIENT
-        return self.DAO.get(key, client=client).data_dict()
+        return self.DAO.get(*keys).data_dict()
     
     def render_POST(self, request):
         "Update object."
@@ -61,22 +58,26 @@ class ObjectListResource(json.JSONResource):
         
     def render_GET(self, request):
         "Render list of objects."
-        return json.encode([obj.data_dict()
-                            for obj in self.DAO.filter()])
+        return json.encode(list(self.filter()))
 
     def render_POST(self, request):
         "Create new object."
         content = request.content.read()
         data_dict = de_unicodify_keys(json.decode(content))
-        self.create_obj(data_dict)
+        self.create(data_dict)
         request.setResponseCode(http.CREATED)
         return ''
 
-    def create_obj(self, data_dict):
+    def create(self, data_dict):
         obj = self.DAO.create(**data_dict)
         db.commit()
         return obj
-    
+
+    def filter(self):
+        for obj in self.DAO.filter():
+            yield obj.data_dict()
+            
+        
 def de_unicodify_keys(d):
     return dict((str(key), value) for key, value in d.items())
 

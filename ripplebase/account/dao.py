@@ -16,18 +16,10 @@ class NodeDAO(db.DAO):
         'name': 'name',
         'client': 'client',  # maps to Client.name
     }
-    keys = ['name']
+    keys = ['name', 'client']
     fk_daos = {
         'client': ClientDAO,
     }
-
-    @classmethod
-    def _get_data_obj(cls, *keys, **kwargs):
-        "Client filter may be passed in kwargs."
-        client = kwargs.get('client')        
-        if client is None:
-            return super(NodeDAO, cls)._get_data_obj(*keys)
-        return cls.filter(name=keys[0], client=client)[0].data_obj
         
 class AddressDAO(db.DAO):
     model = Address
@@ -36,7 +28,7 @@ class AddressDAO(db.DAO):
         'client': 'client',  # maps to Client.name
         'nodes': None,  # maps to m2m association table
     }
-    keys = ['address']
+    keys = ['address', 'client']
     fk_daos = {
         'client': ClientDAO,
     }

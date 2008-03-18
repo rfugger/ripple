@@ -33,7 +33,7 @@ class ClientTest(unittest.TestCase):
             except AttributeError:  # unix
                 subprocess.Popen(['kill', str(self.server.pid)])
 
-    def test_make_node(self):
+    def test_node(self):
         url = root_url + 'acct/node/'
         data_dict = {u'name': u'my_node'}
         data = json.encode(data_dict)
@@ -57,10 +57,18 @@ class ClientTest(unittest.TestCase):
                 raise
 
         # check node is there
-        url = root_url + 'acct/node/my_node'
         req = urllib.Request(url)
         response = urllib.urlopen(req)
         json_data = response.read()
-        recv_data = json.decode(data)
+        recv_data = json.decode(json_data)[0]
         self.assertEquals(recv_data, data_dict)
-    
+
+        req = urllib.Request(url + 'my_node')
+        response = urllib.urlopen(req)
+        json_data = response.read()
+        recv_data = json.decode(json_data)
+        self.assertEquals(recv_data, data_dict)
+
+        
+#     def test_address(self):
+#         pass
