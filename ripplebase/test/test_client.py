@@ -49,7 +49,7 @@ class ClientTest(unittest.TestCase):
                     break
                 raise
             except urllib.URLError, ue:
-                if ue.reason.args[0] == 10061:  # connection refused
+                if ue.reason.args[0] in (10061, 111):  # connection refused
                     # wait for server to be up
                     import time
                     time.sleep(0.5)
