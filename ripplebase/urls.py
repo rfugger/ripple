@@ -3,6 +3,11 @@
 from ripplebase.account import resources as acct
 
 urls = (
-    ('^/nodes/?$', acct.nodes),
+    # nodes
+    ('^/nodes/?$', acct.node_list),
     ('^/nodes/([^/]+)/?$', acct.node),
+
+    # addresses
+    ('^/addresses/?$', acct.address_list),
+    ('^/addresses/([^/]+)/?$', acct.address),
 )

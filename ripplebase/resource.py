@@ -43,33 +43,6 @@ class JSONSiteResource(SiteResource):
         json_body = json.encode(body)
         return json_body.encode('utf-8')  # twisted web expects regular str
 
-######### old stuff #############
-    
-class ObjectResource(object):
-    """Resource for actions on a single object.
-    """
-    allowedMethods = ('GET', 'POST', 'DELETE')
-
-    # set in subclasses
-    DAO = None
-    
-    def __call__(self, request, *keys):
-        if request.method == 'GET':
-            response = self.get(request, *keys)
-        elif request.method == 'POST':
-            raise NotImplemented
-        elif request.method == 'DELETE':
-            raise NotImplemented
-        else:
-            raise server.UnsupportedMethod(getattr(self, 'allowedMethods', ()))
-        return response
-    
-    def get(self, request, *keys):
-        "Returns data_dict for object."
-        keys = [unicode(key) for key in keys]
-        return self.DAO.get(*keys).data_dict()
-    
-
 class ObjectListResource(object):
     "Resource for CRUD on a particular API data model."
     allowedMethods = ('GET', 'POST')
@@ -78,13 +51,9 @@ class ObjectListResource(object):
     DAO = None
 
     def __call__(self, request):
-        if request.method == 'GET':
-            response = self.get(request)
-        elif request.method == 'POST':
-            response = self.post(request)
-        else:
+        if request.method not in self.allowedMethods:
             raise server.UnsupportedMethod(getattr(self, 'allowedMethods', ()))
-        return response
+        return getattr(self, request.method.lower())(request)
     
     def get(self, request):
         "Render list of objects."
@@ -105,8 +74,33 @@ class ObjectListResource(object):
     def filter(self):
         for obj in self.DAO.filter():
             yield obj.data_dict()
-            
+
+class ObjectResource(object):
+    """Resource for actions on a single object.
+    """
+    allowedMethods = ('GET', 'POST', 'DELETE')
+
+    # set in subclasses
+    DAO = None
+    
+    def __call__(self, request, *keys):
+        "Calls appropriate method for this request."
+        if request.method not in self.allowedMethods:
+            raise server.UnsupportedMethod(getattr(self, 'allowedMethods', ()))
+        return getattr(self, request.method.lower())(request, *keys)
+    
+    def get(self, request, *keys):
+        "Returns data_dict for object."
+        keys = [unicode(key) for key in keys]
+        return self.DAO.get(*keys).data_dict()
+
+    def post(self, request, *keys):
+        raise NotImplemented
+
+    def delete(self, request, *keys):
+        raise NotImplemented
         
 def de_unicodify_keys(d):
+    "Makes dict keys regular strings so it can be used for kwargs."
     return dict((str(key), value) for key, value in d.items())
 
