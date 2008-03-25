@@ -10,7 +10,7 @@ from ripplebase import db, settings, json
 
 ripplebase_path = ripplebase.__path__[0]
 
-root_url = 'http://localhost:%d/' % settings.HTTP_PORT
+root_url = 'http://localhost:%d' % settings.HTTP_PORT
 
 def make_server():
     return subprocess.Popen(['python',
@@ -34,7 +34,7 @@ class ClientTest(unittest.TestCase):
                 subprocess.Popen(['kill', str(self.server.pid)])
 
     def test_node(self):
-        url = root_url + 'acct/node/'
+        url = root_url + '/nodes/'
         data_dict = {u'name': u'my_node'}
         data = json.encode(data_dict)
         headers = {'content-type':

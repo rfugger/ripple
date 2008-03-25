@@ -86,13 +86,3 @@ class RippleJSONEncoder(simplejson.JSONEncoder):
 # class DecimalJSONDecoder(simplejson.JSONDecoder):
 #     _scanner = simplejson.decoder.Scanner(ALL_TYPES)
 
-
-##### JSON twisted.web resource #####
-
-class JSONResource(resource.Resource):
-    "Return content-type: application/json; charset=utf-8."
-    def render(self, request):
-        request.setHeader("Content-type",
-                          'application/json; charset=utf-8')
-        body = resource.Resource.render(self, request)
-        return body.encode('utf-8')  # twisted web expects regular str

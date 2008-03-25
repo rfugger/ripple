@@ -70,6 +70,8 @@ account_limits_table = sql.Table(
 exchange_table = sql.Table(
     'exchange', db.meta,
     sql.Column('id', sql.Integer, primary_key=True),
+    sql.Column('is_active', sql.Boolean, nullable=False),
+    sql.Column('effective_time', sql.DateTime, nullable=False),
     sql.Column('source_account_id', sql.Integer,
                sql.ForeignKey('account.id'),
                nullable=False),

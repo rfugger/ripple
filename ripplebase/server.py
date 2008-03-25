@@ -3,15 +3,10 @@
 from twisted.web import server
 from twisted.internet import reactor
 
-from ripplebase.account.resources import acct_root
-from ripplebase.payment.resources import pmt_root
-from ripplebase.json import JSONResource
-from ripplebase import settings
+from ripplebase.resource import JSONSiteResource
+from ripplebase import settings, urls
 
-root = JSONResource()
-root.putChild('acct', acct_root)
-root.putChild('txn', pmt_root)
-
+root = JSONSiteResource(urls.urls)
 site = server.Site(root)
 reactor.listenTCP(settings.HTTP_PORT, site)
 reactor.run()
