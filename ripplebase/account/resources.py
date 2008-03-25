@@ -14,7 +14,7 @@ class NodeResource(ObjectResource):
         # *** replace with actual client
         from ripplebase import settings
         client = settings.TEST_CLIENT
-        d = ObjectResource.get(self, request, key, client)
+        d = super(NodeResource, self).get(request, key, client)
         del d['client']
         return d
 node = NodeResource()
@@ -27,7 +27,7 @@ class NodeListResource(ObjectListResource):
         "Add client key to data_dict."
         from ripplebase import settings
         data_dict['client'] = settings.TEST_CLIENT
-        ObjectListResource.create(self, data_dict)
+        super(NodeListResource, self).create(data_dict)
 
     def filter(self):
         # *** replace with actual client

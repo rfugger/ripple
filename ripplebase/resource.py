@@ -54,7 +54,6 @@ class ObjectResource(object):
     DAO = None
     
     def __call__(self, request, *keys):
-        print keys
         if request.method == 'GET':
             response = self.get(request, *keys)
         elif request.method == 'POST':
@@ -71,7 +70,7 @@ class ObjectResource(object):
         return self.DAO.get(*keys).data_dict()
     
 
-class ObjectListResource(resource.Resource):
+class ObjectListResource(object):
     "Resource for CRUD on a particular API data model."
     allowedMethods = ('GET', 'POST')
 
