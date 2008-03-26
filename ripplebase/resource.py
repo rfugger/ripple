@@ -104,3 +104,34 @@ def de_unicodify_keys(d):
     "Makes dict keys regular strings so it can be used for kwargs."
     return dict((str(key), value) for key, value in d.items())
 
+
+class ClientFieldAwareObjectListResource(ObjectListResource):
+    """For DAOs that have a client field, which is implicit
+    in the API, since the server knows who the client is already.
+    """
+    def create(self, data_dict):
+        "Add client key to data_dict."
+        # *** replace with actual client
+        from ripplebase import settings
+        data_dict['client'] = settings.TEST_CLIENT
+        super(ClientFieldAwareObjectListResource, self).create(data_dict)
+
+    def filter(self):
+        # *** replace with actual client
+        from ripplebase import settings
+        client = settings.TEST_CLIENT
+        for obj in self.DAO.filter(client=client):
+            d = obj.data_dict()
+            del d['client']
+            yield d
+    
+class ClientFieldAwareObjectResource(ObjectResource):
+    def get(self, request, key):
+        "Restrict to calling client; remove client field."
+        # *** replace with actual client
+        from ripplebase import settings
+        client = settings.TEST_CLIENT
+        d = super(ClientFieldAwareObjectResource, self).get(request, key, client)
+        del d['client']
+        return d
+    
