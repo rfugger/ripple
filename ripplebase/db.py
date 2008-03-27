@@ -102,9 +102,7 @@ class SimpleDAO(object):
 
     @classmethod
     def _get_data_obj(cls, *keys):
-        db_keys = [cls.db_fields[key] for key in cls.keys]
-        return query(cls.model).filter_by(
-            **dict(zip(db_keys, keys))).one()
+        return cls.filter(**dict(zip(cls.keys, keys))).query.one()
     
     @classmethod
     def get(cls, *keys):
@@ -169,10 +167,6 @@ class DAO(SimpleDAO):
         else:
             return super(DAO, self).__getattr__(attr)
 
-    @classmethod
-    def _get_data_obj(cls, *keys):
-        return cls.filter(**dict(zip(cls.keys, keys))).query.one()
-        
     @classmethod
     def filter(cls, **kwargs):
         fk_fields = set(kwargs.keys()).intersection(

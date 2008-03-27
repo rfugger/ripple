@@ -164,6 +164,7 @@ class AccountDAOTest(DAOTest):
 
     data = [
         {'name': u'my_account',
+         'relationship': 0,
          'node': NodeDAOTest.data[0]['name'],
          'balance': D('0.00'),
          'upper_limit': D('100.00'),
@@ -176,4 +177,8 @@ class AccountDAOTest(DAOTest):
         super(AccountDAOTest, self).setUp()
         ClientDAOTest.create()
         NodeDAOTest.create()
+        from ripplebase.account.tables import RELATIONSHIP_STATUS
+        RelationshipDAO.create(id=self.data[0]['relationship'],
+                               status=RELATIONSHIP_STATUS['invited'])
+        
         

@@ -84,8 +84,8 @@ class AccountRequest(object):
     pass
 db.mapper(AccountRequest, account_request_table, properties={
     'relationship': orm.relation(Relationship),
-    'source_address': orm.relation(Address, primary_join=
+    'source_address': orm.relation(Address, primaryjoin=
         account_request_table.c.source_address_id==address_table.c.id),
-    'dest_address': orm.relation(Address, primary_join=
+    'dest_address': orm.relation(Address, primaryjoin=
         account_request_table.c.dest_address_id==address_table.c.id)})
     

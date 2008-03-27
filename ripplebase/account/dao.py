@@ -33,14 +33,14 @@ class ClientDAO(db.DAO):
 class NodeDAO(db.DAO):
     model = Node
     db_fields = {
-        'name': 'name',
+        'name': 'name',  # unique for whole server (encode with client at higher level)
         'client': 'client',  # maps to Client.name
     }
-    keys = ['name', 'client']
+    keys = ['name']
     fk_daos = {
         'client': ClientDAO,
     }
-        
+    
 class AddressDAO(db.DAO):
     model = Address
     db_fields = {
@@ -48,7 +48,7 @@ class AddressDAO(db.DAO):
         'client': 'client',  # maps to Client.name
         'nodes': None,  # maps to m2m association table
     }
-    keys = ['address', 'client']
+    keys = ['address']
     fk_daos = {
         'client': ClientDAO,
     }
@@ -56,15 +56,15 @@ class AddressDAO(db.DAO):
     def __setattr__(self, attr, value):
         if attr == 'nodes':
             self.data_obj.nodes = []
-            for node_key in value:  # value is list of node keys (name, client)
-                node_dao = NodeDAO.get(*node_key)
+            for node_name in value:  # value is list of node names
+                node_dao = NodeDAO.get(node_name)
                 self.data_obj.nodes.append(node_dao.data_obj)
         else:
             super(AddressDAO, self).__setattr__(attr, value)
 
     def __getattr__(self, attr):
         if attr == 'nodes':
-            return [(node.name, node.client.name) for node in self.data_obj.nodes]
+            return [node.name for node in self.data_obj.nodes]
         else:
             return super(AddressDAO, self).__getattr__(attr)
 

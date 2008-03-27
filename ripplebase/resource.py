@@ -63,6 +63,10 @@ class JSONSiteResource(SiteResource):
         json_body = json.encode(body)
         return json_body.encode('utf-8')  # twisted web expects regular str
 
+# *** Maybe make __call__ a classmethod for the next two classes
+#     and have it create an instance populated with request and related data
+#     such as a client object.  Either that or just add in 'client' to request
+#     and pass it wherever client is needed, which might get unwieldy.
 class ObjectListResource(object):
     "Resource for CRUD on a particular API data model."
     allowedMethods = ('GET', 'POST')
@@ -124,16 +128,27 @@ def de_unicodify_keys(d):
     "Makes dict keys regular strings so it can be used for kwargs."
     return dict((str(key), value) for key, value in d.items())
 
+# for inclusion in classes below
+def add_client(self, data_dict):
+    "Add client key to data_dict."
+    # *** replace with actual client
+    from ripplebase import settings
+    data_dict['client'] = settings.TEST_CLIENT
+
+def strip_client(self, data_dict):
+    "Remove client from data_dict."
+    del data_dict['client']
 
 class ClientFieldAwareObjectListResource(ObjectListResource):
     """For DAOs that have a client field, which is implicit
     in the API, since the server knows who the client is already.
     """
+    add_client = add_client
+    strip_client = strip_client
+
     def create(self, data_dict):
         "Add client key to data_dict."
-        # *** replace with actual client
-        from ripplebase import settings
-        data_dict['client'] = settings.TEST_CLIENT
+        self.add_client(data_dict)
         super(ClientFieldAwareObjectListResource, self).create(data_dict)
 
     def filter(self):
@@ -142,16 +157,17 @@ class ClientFieldAwareObjectListResource(ObjectListResource):
         client = settings.TEST_CLIENT
         for obj in self.DAO.filter(client=client):
             d = obj.data_dict()
-            del d['client']
+            self.strip_client(d)
             yield d
     
 class ClientFieldAwareObjectResource(ObjectResource):
+    # reuse methods
+    add_client = add_client
+    strip_client = strip_client
+
     def get(self, request, key):
         "Restrict to calling client; remove client field."
-        # *** replace with actual client
-        from ripplebase import settings
-        client = settings.TEST_CLIENT
-        d = super(ClientFieldAwareObjectResource, self).get(request, key, client)
-        del d['client']
+        d = super(ClientFieldAwareObjectResource, self).get(request, key)
+        self.strip_client(d)
         return d
     
