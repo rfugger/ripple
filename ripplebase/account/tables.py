@@ -36,20 +36,21 @@ client_table = sql.Table(
 node_table = sql.Table(
     'node', db.meta,
     sql.Column('id', sql.Integer, primary_key=True),
-    sql.Column('name', sql.Unicode(256), nullable=False, unique=True),
+    sql.Column('name', sql.Unicode(256), nullable=False),
     sql.Column('client_id', sql.Integer,
                sql.ForeignKey('client.id'),
                nullable=False),
+    sql.Column('is_deleted', sql.Boolean, nullable=False, default=False),
+    sql.UniqueConstraint('name', 'client_id'),
 )
 
 address_table = sql.Table(
     'address', db.meta,
     sql.Column('id', sql.Integer, primary_key=True),
-    sql.Column('address', sql.Unicode(256), nullable=False),
+    sql.Column('address', sql.Unicode(256), nullable=False, unique=True),
     sql.Column('client_id', sql.Integer,
                sql.ForeignKey('client.id'),
                nullable=False),
-    sql.UniqueConstraint('address', 'client_id'),
 )
 
 node_addresses_table = sql.Table(
@@ -62,14 +63,30 @@ node_addresses_table = sql.Table(
                nullable=False),
 )
 
+# A relationship (link/connection between two nodes) contains two accounts,
+# one for each node.
+relationship_table = sql.Table(
+    'relationship', db.meta,
+    sql.Column('id', sql.Integer, primary_key=True),
+    sql.Column('status', sql.Unicode(16), nullable=False),
+)
+
+RELATIONSHIP_STATUS = {
+    'invited': 'invited',  # one account registered
+    'active': 'active',  # both accounts registered, active
+    'inactive': 'inactive',  # accounts closed or otherwise inactive
+}
+
 account_table = sql.Table(
     'account', db.meta,
     sql.Column('id', sql.Integer, primary_key=True),
+    sql.Column('relationship_id', sql.Integer,
+               sql.ForeignKey('relationship.id'),
+               nullable=False),
     sql.Column('name', sql.Unicode(256), nullable=False),
     sql.Column('node_id', sql.Integer,
                sql.ForeignKey('node.id'),
                nullable=False),
-    # *** status column necessary here?
     sql.Column('balance', sql.Numeric(PRECISION, SCALE),
                nullable=False),
 )
@@ -122,3 +139,17 @@ exchange_rate_entry_table = sql.Table(
                nullable=False),
 )
 
+account_request_table = sql.Table(
+    'account', db.meta,
+    sql.Column('id', sql.Integer, primary_key=True),
+    sql.Column('relationship_id', sql.Integer,
+               sql.ForeignKey('relationship.id'),
+               nullable=False),
+    sql.Column('source_address_id', sql.Integer,
+               sql.ForeignKey('address.id'),
+               nullable=False),
+    sql.Column('dest_address_id', sql.Integer,
+               sql.ForeignKey('address.id'),
+               nullable=False),
+    sql.Column('note', sql.Unicode, nullable=False)
+)

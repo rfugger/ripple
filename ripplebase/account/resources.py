@@ -33,7 +33,9 @@ class NodeResource(ClientFieldAwareObjectResource):
     allowedMethods = ('GET', 'DELETE')  # can't post modifications to node
     DAO = NodeDAO
 node = NodeResource()
-    
+
+# *** i am here - need to add client to node keys, and strip them on the way out
+#     too awful, so decided to try something simpler.
 class AddressListResource(ClientFieldAwareObjectListResource):
     DAO = AddressDAO
 address_list = AddressListResource()

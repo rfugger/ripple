@@ -56,34 +56,31 @@ class AddressDAO(db.DAO):
     def __setattr__(self, attr, value):
         if attr == 'nodes':
             self.data_obj.nodes = []
-            for node_name in value:  # value is list of node names
-                node_dao = NodeDAO.get(node_name)
-                # ensure node client matches address client
-                # *** maybe better done elsewhere?
-                if self.client:
-                    assert self.client == node_dao.client, \
-                        "Invalid node: '%s'." % node_name
+            for node_key in value:  # value is list of node keys (name, client)
+                node_dao = NodeDAO.get(*node_key)
                 self.data_obj.nodes.append(node_dao.data_obj)
         else:
-            # check that self.client matches all node clients
-            # *** maybe better done elsewhere?
-            if attr == 'client':
-                for node in self.data_obj.nodes:  # list of Node
-                    # value is client name
-                    assert value == node.client.name, \
-                        "Invalid node: '%s'." % node.name
             super(AddressDAO, self).__setattr__(attr, value)
 
     def __getattr__(self, attr):
         if attr == 'nodes':
-            return [node.name for node in self.data_obj.nodes]
+            return [(node.name, node.client.name) for node in self.data_obj.nodes]
         else:
             return super(AddressDAO, self).__getattr__(attr)
-    
+
+class RelationshipDAO(db.DAO):
+    model = Relationship
+    db_fields = {
+        'id': 'id',
+        'status': 'status',
+    }
+    keys = ['id']
+        
 class AccountDAO(db.DAO):
     model = Account
     db_fields = {
         'name': 'name',
+        'relationship': 'relationship',
         'node': 'node',
         'balance': 'balance',
         'upper_limit': None,  # maps to AccountLimits.upper_limit
@@ -93,6 +90,7 @@ class AccountDAO(db.DAO):
     }
     keys = ['name']
     fk_daos = {
+        'relationship': RelationshipDAO,
         'node': NodeDAO,
     }
 
@@ -145,7 +143,10 @@ class AccountDAO(db.DAO):
 
     def __getattr__(self, attr):
         if attr in self.limits_map:
-            return getattr(self.limits, self.limits_map[attr])
+            if self.limits:
+                return getattr(self.limits, self.limits_map[attr])
+            else:
+                return None
         else:
             return super(AccountDAO, self).__getattr__(attr)
 
@@ -174,3 +175,20 @@ class ExchangeRateDAO(db.DAO):
     keys = ['name']
 
     # *** handle nonstandard fields
+
+    
+class AccountRequestDAO(db.DAO):
+    model = AccountRequest
+    db_fields = {
+        'id': 'id',
+        'relationship': 'relationship',
+        'source_address': 'source_address',
+        'dest_address': 'dest_address',
+        'note': 'note',
+    }
+    keys = ['id']
+    fk_daos = {
+        'relationship': RelationshipDAO,
+        'source_address': AddressDAO,
+        'dest_address': AddressDAO,
+    }

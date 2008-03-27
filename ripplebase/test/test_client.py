@@ -116,3 +116,4 @@ class ClientTest(unittest.TestCase):
          # check url
          recv_data = urlopen('/addresses/my_address/')
          self.assertEquals(recv_data, address_dict)
+
