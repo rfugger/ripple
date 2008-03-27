@@ -91,7 +91,7 @@ class ClientTest(unittest.TestCase):
                 subprocess.Popen(['kill', str(self.server.pid)])
 
     def test_node(self):
-        data_dict = {u'name': u'my_node'}
+        data_dict = {u'name': u'my_node', u'addresses': []}
         create_node(data_dict)
             
         # check node is in list
