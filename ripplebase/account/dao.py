@@ -41,22 +41,7 @@ class NodeDAO(db.DAO):
     fk_daos = {
         'client': ClientDAO,
     }
-
-    # *** move this to superclass, create new field m2m_daos
-    def __setattr__(self, attr, value):
-        if attr == 'addresses':
-            self.data_obj.addresses = []
-            for address_name in value:  # value is list of address names
-                address_dao = AddressDAO.get(address_name)
-                self.data_obj.addresses.append(address_dao.data_obj)
-        else:
-            super(NodeDAO, self).__setattr__(attr, value)
-
-    def __getattr__(self, attr):
-        if attr == 'addresses':
-            return [address.address for address in self.data_obj.addresses]
-        else:
-            return super(NodeDAO, self).__getattr__(attr)
+    # m2m_daos after AddressDAO, because it needs it.
 
 class AddressDAO(db.DAO):
     model = Address
@@ -69,21 +54,14 @@ class AddressDAO(db.DAO):
     fk_daos = {
         'client': ClientDAO,
     }
+    m2m_daos = {
+        'nodes': NodeDAO,
+    }
 
-    def __setattr__(self, attr, value):
-        if attr == 'nodes':
-            self.data_obj.nodes = []
-            for node_name in value:  # value is list of node names
-                node_dao = NodeDAO.get(node_name)
-                self.data_obj.nodes.append(node_dao.data_obj)
-        else:
-            super(AddressDAO, self).__setattr__(attr, value)
-
-    def __getattr__(self, attr):
-        if attr == 'nodes':
-            return [node.name for node in self.data_obj.nodes]
-        else:
-            return super(AddressDAO, self).__getattr__(attr)
+# must define this after defining AddressDAO
+NodeDAO.m2m_daos = {
+    'addresses': AddressDAO,
+}
 
 class RelationshipDAO(db.DAO):
     model = Relationship

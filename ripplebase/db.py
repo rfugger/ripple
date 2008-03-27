@@ -141,12 +141,7 @@ class DAO(SimpleDAO):
     """
     # api_field: dao_class (DAO must have single api key)
     fk_daos = {}
-
-    @classmethod
-    def get_fk_api_key_db_field(cls, api_field):
-        fk_dao = cls.fk_daos[api_field]
-        api_key = fk_dao.keys[0]
-        return fk_dao.db_fields[api_key]
+    m2m_daos = {}
     
     def __setattr__(self, attr, value):
         if attr in self.fk_daos:
@@ -156,6 +151,12 @@ class DAO(SimpleDAO):
             setattr(self.data_obj,
                     self.db_fields[attr],
                     dao.data_obj)
+        elif attr in self.m2m_daos:
+            dao_class = self.m2m_daos[attr]
+            setattr(self.data_obj, attr, [])
+            for key in value:  # value is list of m2m DAO keys
+                dao = dao_class.get(key)
+                getattr(self.data_obj, attr).append(dao.data_obj)
         else:  # set like regular attribute
             super(DAO, self).__setattr__(attr, value)
 
@@ -163,17 +164,26 @@ class DAO(SimpleDAO):
         if attr in self.fk_daos:
             fk_obj = getattr(self.data_obj, self.db_fields[attr])
             if fk_obj:
-                return getattr(
-                    fk_obj, self.get_fk_api_key_db_field(attr))
+                dao_key = get_dao_key_db_field(self.fk_daos[attr])
+                return getattr(fk_obj, dao_key)
             else:
                 return None
+        elif attr in self.m2m_daos:
+            dao_key = get_dao_key_db_field(self.m2m_daos[attr])
+            return [getattr(data_obj, dao_key)
+                    for data_obj in getattr(self.data_obj, attr)]
         else:
             return super(DAO, self).__getattr__(attr)
 
     @classmethod
     def filter(cls, **kwargs):
-        fk_fields = set(kwargs.keys()).intersection(
-            set(cls.fk_daos.keys()))
+        key_set = set(kwargs.keys())
+        # check for m2m fields
+        m2m_fields = key_set.intersection(set(cls.m2m_daos.keys()))
+        if m2m_fields:
+            raise ValueError('M2M fields not implemented in filter: %s' %
+                             m2mfields)
+        fk_fields = key_set.intersection(set(cls.fk_daos.keys()))
         if fk_fields:
             # filter simple fields first
             simple_kwargs = kwargs.copy()
@@ -182,19 +192,19 @@ class DAO(SimpleDAO):
             q = super(DAO, cls).filter(**simple_kwargs)
             # process fk joins
             for fk_field in fk_fields:
-                # get sqlalchemy mapped class for fk field
-                # eg, Client
-                fk_mapped_class = cls.fk_daos[fk_field].model
+                dao_class = cls.fk_daos[fk_field]
                 # filter_db_field is like 'Client.name',
                 # where 'name' is the key for ClientDAO
                 filter_db_field = getattr(
-                    fk_mapped_class, cls.get_fk_api_key_db_field(fk_field))
+                    dao_class.model, get_dao_key_db_field(dao_class))
                 q = q.join(cls.db_fields[fk_field]).filter(
                     filter_db_field==kwargs[fk_field])
             return q
         else:
             return super(DAO, cls).filter(**kwargs)
     
+def get_dao_key_db_field(DAO):
+    return DAO.db_fields[DAO.keys[0]]
     
 class APIQuery(object):
     """Wrapper for SQLAlchemy Query, returns DAO objects
