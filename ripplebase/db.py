@@ -74,7 +74,10 @@ class SimpleDAO(object):
     
     def __init__(self, data_obj):
         self.data_obj = data_obj
-    
+
+    def __repr__(self):
+        return repr(self.data_dict())
+        
     @classmethod
     def create(cls, **kwargs):
         data_obj = cls.model()

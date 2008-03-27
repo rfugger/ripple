@@ -53,7 +53,8 @@ class DAOTest(unittest.TestCase):
             keys = [fields[key] for key in self.dao.keys]
             obj = self.dao.get(*keys)
             for api_field in obj.db_fields:
-                self.assertEquals(getattr(obj, api_field),
+                if api_field not in fields:
+                    self.assertEquals(getattr(obj, api_field),
                                   fields[api_field])
 
     def test_filter(self):
@@ -69,8 +70,8 @@ class DAOTest(unittest.TestCase):
                 try:
                     data_copy.remove(data_dict)
                 except ValueError, ve:
-                    print data_dict
-                    self.fail(ve)
+                    self.fail("Item found in filter not in initial data: %s."
+                              "Error is: %s" % (data_dict, ve))
             # check that misses are correct too
             for data_dict in data_copy:  # remaining objects are misses
                 # must not match at least one filter key
@@ -94,16 +95,32 @@ class ClientDAOTest(DAOTest):
 
     filter_kwargs = [{}] + data
 
+address_data = [
+    {'address': u'address1',
+     'client': ClientDAOTest.data[0]['name']},
+    {'address': u'address2',
+     'client': ClientDAOTest.data[1]['name']},
+    {'address': u'address3',
+     'client': ClientDAOTest.data[0]['name']},
+]
+    
 class NodeDAOTest(DAOTest):
     dao = NodeDAO
 
     data = [
         {'name': u'my_name',
-         'client': ClientDAOTest.data[0]['name']},
+         'client': ClientDAOTest.data[0]['name'],
+         'addresses': []},  # empty addresses
         {'name': u'other_node',
-         'client': ClientDAOTest.data[1]['name']},
+         'client': ClientDAOTest.data[1]['name'],
+         'addresses': [address_data[1]['address']]},
         {'name': u'good_node',
-         'client': ClientDAOTest.data[0]['name']},
+         'client': ClientDAOTest.data[0]['name'],
+         'addresses': [address_data[0]['address']]},
+        {'name': u'nodeynode',
+         'client': ClientDAOTest.data[0]['name'],
+         'addresses': [address_data[0]['address'],
+                       address_data[2]['address']]},
     ]
 
     filter_kwargs = [
@@ -114,45 +131,108 @@ class NodeDAOTest(DAOTest):
          'client': ClientDAOTest.data[1]['name']},
     ]
 
-    def setUp(self):
-        super(NodeDAOTest, self).setUp()
+    @classmethod
+    def create(cls):
         ClientDAOTest.create()
+        for data in address_data:
+            AddressDAO.create(**data)
+        super(NodeDAOTest, cls).create()
 
+    def test_no_addresses(self):
+        "Make sure it works with addresses left out."
+        ClientDAOTest.create()
+        data = {'name': u'no_addresses',
+                'client': NodeDAOTest.data[0]['client']}
+        NodeDAO.create(**data)
+        data['addresses'] = []
+        obj = NodeDAO.get(data['name'])
+        self.assertEquals(obj.data_dict(), data)
+
+    def test_address_nodes(self):
+        "Make sure new addresses come up on nodes."
+        self.create()
+        address_nodes = {
+            address_data[0]['address']: [self.data[2]['name'],
+                                         self.data[3]['name']],
+            address_data[1]['address']: [self.data[1]['name']],
+            address_data[2]['address']: [self.data[3]['name']],
+        }
+        for address, nodes in address_nodes.items():
+            obj = AddressDAO.get(unicode(address))
+            self.assertEquals(obj.nodes, nodes)
+
+node_data = [
+    {'name': u'my_name',
+     'client': ClientDAOTest.data[0]['name']},
+    {'name': u'other_node',
+     'client': ClientDAOTest.data[1]['name']},
+    {'name': u'good_node',
+     'client': ClientDAOTest.data[0]['name']},
+]
     
 class AddressDAOTest(DAOTest):
     dao = AddressDAO
 
     data = [
-        {'address': u'node1',
-         'client': NodeDAOTest.data[0]['client'],
-         'nodes': [NodeDAOTest.data[0]['name']]},
-        {'address': u'node2',
-         'client': NodeDAOTest.data[1]['client'],
-         'nodes': [NodeDAOTest.data[1]['name']]},
-        {'address': u'node3',
-         'client': NodeDAOTest.data[2]['client'],
-         'nodes': [NodeDAOTest.data[2]['name']]},
+        {'address': u'address0',
+         'client': node_data[0]['client'],
+         'nodes': []},  # empty nodes field
+        {'address': u'address1',
+         'client': node_data[0]['client'],
+         'nodes': [node_data[0]['name']]},
+        {'address': u'address2',
+         'client': node_data[1]['client'],
+         'nodes': [node_data[1]['name']]},
+        {'address': u'address3',
+         'client': node_data[2]['client'],
+         'nodes': [node_data[2]['name']]},
         {'address': u'person',
-         'client': NodeDAOTest.data[0]['client'],
-         'nodes': [NodeDAOTest.data[0]['name'],
-                   NodeDAOTest.data[2]['name']]}
+         'client': node_data[0]['client'],
+         'nodes': [node_data[0]['name'],
+                   node_data[2]['name']]}
     ]
 
     filter_kwargs = [
         {},
-        {'address': u'node2'},
+        {'address': u'address2'},
         {'address': u'person'},
         {'client': ClientDAOTest.data[0]['name']},
         {'client': ClientDAOTest.data[0]['name'],
-         'address': u'node1'},
+         'address': u'address1'},
         # cannot query by nodes...
     ]
 
-    def setUp(self):
-        super(AddressDAOTest, self).setUp()
+    @classmethod
+    def create(cls):
         ClientDAOTest.create()
-        NodeDAOTest.create()
+        for data in node_data:
+            NodeDAO.create(**data)
+        super(AddressDAOTest, cls).create()
 
+    def test_no_nodes(self):
+        "Make sure it works with nodes left out."
+        ClientDAOTest.create()
+        data = {'address': u'no_nodes',
+                'client': node_data[0]['client']}
+        AddressDAO.create(**data)
+        data['nodes'] = []
+        obj = AddressDAO.get(data['address'])
+        self.assertEquals(obj.data_dict(), data)
+
+    def test_node_addresses(self):
+        "Make sure new addresses come up on nodes."
+        self.create()
+        node_addresses = {
+            node_data[0]['name']: [self.data[1]['address'],
+                                   self.data[4]['address']],
+            node_data[1]['name']: [self.data[2]['address']],
+            node_data[2]['name']: [self.data[3]['address'],
+                                   self.data[4]['address']],
+        }
+        for node, addresses in node_addresses.items():
+            obj = NodeDAO.get(node)
+            self.assertEquals(obj.addresses, addresses)
+        
 # *** do some DAO tests with invalid fields
         
 # *** do some addresses with faulty data
@@ -173,12 +253,13 @@ class AccountDAOTest(DAOTest):
          'limits_expiry_time': datetime(2008, 3, 11, 23, 21, 23, 945000)}
     ]
 
-    def setUp(self):
-        super(AccountDAOTest, self).setUp()
-        ClientDAOTest.create()
+    def create(cls):
         NodeDAOTest.create()
+
+        # *** ought to create relationship automatically in DAO if not in data
         from ripplebase.account.tables import RELATIONSHIP_STATUS
-        RelationshipDAO.create(id=self.data[0]['relationship'],
+        RelationshipDAO.create(id=cls.data[0]['relationship'],
                                status=RELATIONSHIP_STATUS['invited'])
         
+        super(AccountDAOTest, cls).create()
         

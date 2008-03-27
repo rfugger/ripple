@@ -119,10 +119,10 @@ class ObjectResource(object):
         return self.DAO.get(*keys).data_dict()
 
     def post(self, request, *keys):
-        raise NotImplemented
+        return NotImplemented
 
     def delete(self, request, *keys):
-        raise NotImplemented
+        return NotImplemented
         
 def de_unicodify_keys(d):
     "Makes dict keys regular strings so it can be used for kwargs."

@@ -35,12 +35,29 @@ class NodeDAO(db.DAO):
     db_fields = {
         'name': 'name',  # unique for whole server (encode with client at higher level)
         'client': 'client',  # maps to Client.name
+        'addresses': None,  # maps to m2m association table
     }
     keys = ['name']
     fk_daos = {
         'client': ClientDAO,
     }
-    
+
+    # *** move this to superclass, create new field m2m_daos
+    def __setattr__(self, attr, value):
+        if attr == 'addresses':
+            self.data_obj.addresses = []
+            for address_name in value:  # value is list of address names
+                address_dao = AddressDAO.get(address_name)
+                self.data_obj.addresses.append(address_dao.data_obj)
+        else:
+            super(NodeDAO, self).__setattr__(attr, value)
+
+    def __getattr__(self, attr):
+        if attr == 'addresses':
+            return [address.address for address in self.data_obj.addresses]
+        else:
+            return super(NodeDAO, self).__getattr__(attr)
+
 class AddressDAO(db.DAO):
     model = Address
     db_fields = {
@@ -139,6 +156,7 @@ class AccountDAO(db.DAO):
                 self.new_limits()
             setattr(self.limits, self.limits_map[attr], value)
         else:
+            # *** create new relationship object if doesn't exist
             super(AccountDAO, self).__setattr__(attr, value)
 
     def __getattr__(self, attr):
