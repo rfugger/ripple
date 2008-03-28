@@ -74,7 +74,7 @@ class DAOTest(unittest.TestCase):
                               "Error is: %s" % (data_dict, ve))
             # check that misses are correct too
             for data_dict in data_copy:  # remaining objects are misses
-                # must not match at least one filter key
+                # must fail to match at least one filter key
                 match = True
                 for key, value in filter_kwargs.items():
                     if data_dict[key] != value:
@@ -253,13 +253,46 @@ class AccountDAOTest(DAOTest):
          'limits_expiry_time': datetime(2008, 3, 11, 23, 21, 23, 945000)}
     ]
 
+    filter_kwargs = [
+        {},
+        {'name': u'my_account'},
+        {'node': NodeDAOTest.data[0]['name'],},
+    ]
+    
+    @classmethod
     def create(cls):
         NodeDAOTest.create()
-
-        # *** ought to create relationship automatically in DAO if not in data
         from ripplebase.account.tables import RELATIONSHIP_STATUS
         RelationshipDAO.create(id=cls.data[0]['relationship'],
                                status=RELATIONSHIP_STATUS['invited'])
-        
         super(AccountDAOTest, cls).create()
         
+class AccountRequestDAOTest(DAOTest):
+    dao = AccountRequestDAO
+
+    data = [
+        {'relationship': 0,  # get id later
+         'source_address': u'address0',
+         'dest_address': u'address1',
+         'note': u"Hey\n\nwhat's up?"},
+    ]
+
+    filter_kwargs = [
+        {},
+        {'relationship': 0},
+        {'relationship': 1},
+        {'source_address': u'address0'},
+        {'dest_address': u'address1'},
+        {'dest_address': u'address0'},
+        {'source_address': u'address0', 'dest_address': u'address1'},
+        {'source_address': u'address0', 'dest_address': u'bunk'},
+    ]
+    
+    @classmethod
+    def create(cls):
+        AddressDAOTest.create()
+        from ripplebase.account.tables import RELATIONSHIP_STATUS
+        RelationshipDAO.create(id=cls.data[0]['relationship'],
+                               status=RELATIONSHIP_STATUS['invited'])
+        super(AccountRequestDAOTest, cls).create()
+

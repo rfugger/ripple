@@ -103,6 +103,21 @@ account_limits_table = sql.Table(
     sql.Column('lower_limit', sql.Numeric(PRECISION, SCALE)),
 )
 
+account_request_table = sql.Table(
+    'account_request', db.meta,
+    sql.Column('id', sql.Integer, primary_key=True),
+    sql.Column('relationship_id', sql.Integer,
+               sql.ForeignKey('relationship.id'),
+               nullable=False),
+    sql.Column('source_address_id', sql.Integer,
+               sql.ForeignKey('address.id'),
+               nullable=False),
+    sql.Column('dest_address_id', sql.Integer,
+               sql.ForeignKey('address.id'),
+               nullable=False),
+    sql.Column('note', sql.Text, nullable=False)
+)
+
 exchange_table = sql.Table(
     'exchange', db.meta,
     sql.Column('id', sql.Integer, primary_key=True),
@@ -136,19 +151,4 @@ exchange_rate_entry_table = sql.Table(
     sql.Column('expiry_time', sql.DateTime, nullable=False),    
     sql.Column('rate', sql.Numeric(PRECISION, SCALE),
                nullable=False),
-)
-
-account_request_table = sql.Table(
-    'account_request', db.meta,
-    sql.Column('id', sql.Integer, primary_key=True),
-    sql.Column('relationship_id', sql.Integer,
-               sql.ForeignKey('relationship.id'),
-               nullable=False),
-    sql.Column('source_address_id', sql.Integer,
-               sql.ForeignKey('address.id'),
-               nullable=False),
-    sql.Column('dest_address_id', sql.Integer,
-               sql.ForeignKey('address.id'),
-               nullable=False),
-    sql.Column('note', sql.Text, nullable=False)
 )

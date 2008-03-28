@@ -138,6 +138,7 @@ class SimpleDAO(object):
 class DAO(SimpleDAO):
     """Adds ability to map API fields representing keys
     to other objects to those objects across FK relationships.
+    Only works for relationships to DAOs with a single "primary" key.
     """
     # api_field: dao_class (DAO must have single api key)
     fk_daos = {}
@@ -197,7 +198,7 @@ class DAO(SimpleDAO):
                 # where 'name' is the key for ClientDAO
                 filter_db_field = getattr(
                     dao_class.model, get_dao_key_db_field(dao_class))
-                q = q.join(cls.db_fields[fk_field]).filter(
+                q = q.join(cls.db_fields[fk_field], aliased=True).filter(
                     filter_db_field==kwargs[fk_field])
             return q
         else:

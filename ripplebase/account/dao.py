@@ -134,7 +134,8 @@ class AccountDAO(db.DAO):
                 self.new_limits()
             setattr(self.limits, self.limits_map[attr], value)
         else:
-            # *** create new relationship object if doesn't exist
+            # *** create new relationship object if doesn't exist?
+            #     or handle at higher level?
             super(AccountDAO, self).__setattr__(attr, value)
 
     def __getattr__(self, attr):
@@ -146,6 +147,22 @@ class AccountDAO(db.DAO):
         else:
             return super(AccountDAO, self).__getattr__(attr)
 
+class AccountRequestDAO(db.DAO):
+    model = AccountRequest
+    db_fields = {
+        'relationship': 'relationship',
+        'source_address': 'source_address',
+        'dest_address': 'dest_address',
+        'note': 'note',
+    }
+    # FK key won't work if another DAO wants to reference this DAO
+    keys = ['relationship']
+    fk_daos = {
+        'relationship': RelationshipDAO,
+        'source_address': AddressDAO,
+        'dest_address': AddressDAO,
+    }
+    
 class ExchangeDAO(db.DAO):
     model = Exchange
     db_fields = {
@@ -153,12 +170,13 @@ class ExchangeDAO(db.DAO):
         'target_account': 'target_account',
         'rate': 'rate',
     }
-    # nothing refers to this, so don't need keys
+    # FK keys/dual keys won't work if another DAO wants to reference this DAO
+    keys = ['source_account', 'target_account']
     fk_daos = {
         'source_account': AccountDAO,
         'target_account': AccountDAO,
     }
-        
+
 
 class ExchangeRateDAO(db.DAO):
     model = ExchangeRate
@@ -173,18 +191,3 @@ class ExchangeRateDAO(db.DAO):
     # *** handle nonstandard fields
 
     
-class AccountRequestDAO(db.DAO):
-    model = AccountRequest
-    db_fields = {
-        'id': 'id',
-        'relationship': 'relationship',
-        'source_address': 'source_address',
-        'dest_address': 'dest_address',
-        'note': 'note',
-    }
-    keys = ['id']
-    fk_daos = {
-        'relationship': RelationshipDAO,
-        'source_address': AddressDAO,
-        'dest_address': AddressDAO,
-    }
