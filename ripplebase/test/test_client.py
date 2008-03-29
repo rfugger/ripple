@@ -164,24 +164,38 @@ class ClientTest(unittest.TestCase):
         req_data['relationship'] = recv_data[0]['relationship']
         expected_data['relationship'] = req_data['relationship']
         expected_data['is_active'] = False
-        self.process_recv_data(recv_data[0])
+        self.process_acct_recv_data(recv_data[0])
         self.assertEquals(recv_data[0], expected_data)
 
         recv_data = urlopen('/accounts/%s' % init_acct['name'])
-        self.process_recv_data(recv_data)
+        self.process_acct_recv_data(recv_data)
         self.assertEquals(recv_data, expected_data)
         
         # check request
+        recv_data = urlopen('/accountrequests')
+        self.assertEquals(recv_data[0], req_data)
 
         # create other account
+        partner_acct['relationship'] = req_data['relationship']
+        create_account(partner_acct)
 
         # check other account
-
-        # check other request is gone
-
+        recv_data = urlopen('/accounts/%s' % partner_acct['name'])
+        self.process_acct_recv_data(recv_data)
+        expected_data = partner_acct.copy()
+        expected_data['is_active'] = True
+        self.assertEquals(recv_data, expected_data)
+        
+        # check request is gone
+        recv_data = urlopen('/accountrequests/')
+        self.assertEquals(recv_data, [])
+        
         # check original account status
+        recv_data = urlopen('/accounts/%s' % init_acct['name'])
+        self.process_acct_recv_data(recv_data)
+        self.assertEquals(recv_data['is_active'], True)
 
-    def process_recv_data(self, recv_data):
+    def process_acct_recv_data(self, recv_data):
         effective_time = recv_data['limits_effective_time']
         del recv_data['limits_effective_time']
         try:

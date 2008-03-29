@@ -115,7 +115,7 @@ class SimpleDAO(object):
     @classmethod
     def delete(cls, *keys):
         data_obj = cls._get_data_obj(*keys)
-        db.delete(data_obj)
+        delete(data_obj)
 
     @classmethod
     def _api_to_db(cls, **kwargs):

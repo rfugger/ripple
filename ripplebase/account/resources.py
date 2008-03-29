@@ -85,6 +85,7 @@ account_request_fields = {
 }
 
 def account_process_incoming(self, data_dict):
+    # *** only create, update not handled yet
     if 'relationship' not in data_dict:
         # create relationship and account request
         rel = RelationshipDAO.create()
@@ -96,8 +97,12 @@ def account_process_incoming(self, data_dict):
         req = AccountRequestDAO.create(**req_dict)
         data_dict['is_active'] = False
     else:  # confirming account by creating dual account
-        # *** maybe ought to wait for exchanges?
+        # *** maybe ought to wait for exchanges before activating acct?
         data_dict['is_active'] = True
+        AccountRequestDAO.delete(data_dict['relationship'])
+        init_acct = AccountDAO.filter(relationship=data_dict['relationship'])[0]
+        init_acct.is_active = True  # gets committed later
+        
     # *** this is only good for create, not for update
     data_dict['limits_effective_time'] = datetime.now()
     data_dict['node'] = encode_node_name(data_dict['node'], self.client)
@@ -115,6 +120,10 @@ class AccountHandler(ClientFieldAwareObjectHandler):
     process_incoming = account_process_incoming
     process_outgoing = account_process_outgoing
 
+class AccountRequestListHandler(ObjectListHandler):
+    allowedMethods = ('GET', 'HEAD')
+    DAO = AccountRequestDAO
+    
 # class ExchangeHandler(ObjectListHandler):
 #     DAO = ExchangeDAO
 # acct_root.putChild('exchange', ExchangeHandler())
