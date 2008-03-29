@@ -67,14 +67,7 @@ node_addresses_table = sql.Table(
 relationship_table = sql.Table(
     'relationship', db.meta,
     sql.Column('id', sql.Integer, primary_key=True),
-    sql.Column('status', sql.Unicode(16), nullable=False),
 )
-
-RELATIONSHIP_STATUS = {
-    'invited': u'invited',  # one account registered
-    'active': u'active',  # both accounts registered, active
-    'inactive': u'inactive',  # accounts closed or otherwise inactive
-}
 
 account_table = sql.Table(
     'account', db.meta,
@@ -86,6 +79,7 @@ account_table = sql.Table(
     sql.Column('node_id', sql.Integer,
                sql.ForeignKey('node.id'),
                nullable=False),
+    sql.Column('is_active', sql.Boolean, nullable=False),
     sql.Column('balance', sql.Numeric(PRECISION, SCALE),
                nullable=False),
 )
@@ -98,7 +92,7 @@ account_limits_table = sql.Table(
                nullable=False),
     sql.Column('is_active', sql.Boolean, nullable=False),
     sql.Column('effective_time', sql.DateTime, nullable=False),
-    sql.Column('expiry_time', sql.DateTime, nullable=False),    
+    sql.Column('expiry_time', sql.DateTime, nullable=True),
     sql.Column('upper_limit', sql.Numeric(PRECISION, SCALE)),
     sql.Column('lower_limit', sql.Numeric(PRECISION, SCALE)),
 )

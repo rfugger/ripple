@@ -22,6 +22,8 @@ import urllib2 as urllib
 import subprocess
 import os
 import ctypes
+import time
+from decimal import Decimal as D
 
 from twisted.trial import unittest
 from twisted.web import http
@@ -74,7 +76,12 @@ def create_node(data_dict):
 def create_address(data_dict):
     urlopen('/addresses/', data_dict, code=http.CREATED)
 
+def create_account(data_dict):
+    urlopen('/accounts/', data_dict, code=http.CREATED)
+
 class ClientTest(unittest.TestCase):
+    acct_decimal_fields = ('balance', 'upper_limit', 'lower_limit')
+        
     def setUp(self):
         db.reset()
         self.server = make_server()
@@ -117,3 +124,73 @@ class ClientTest(unittest.TestCase):
          recv_data = urlopen('/addresses/my_address/')
          self.assertEquals(recv_data, address_dict)
 
+    def test_account(self):
+        nodes = [{u'name': u'my_node'},
+                 {u'name': u'other_node'}]
+        addresses = [{u'address': u'my_address',
+                      u'nodes': [u'my_node']},
+                     {u'address': u'other_address',
+                      u'nodes': [u'other_node']}]
+        init_acct = {u'name': u'my_account',
+                     u'node': u'my_node',
+                     u'balance': D(u'0.00'),
+                     u'upper_limit': D(u'100.00'),
+                     u'lower_limit': D(u'-100.00'),
+                     u'limits_expiry_time': None,
+                     # the rest are for account request
+                     u'address': u'my_address',
+                     u'partner': u'other_address',
+                     u'note': u'Hey.'}
+        partner_acct = {u'name': u'other_account',
+                        u'relationship': None,  # set in code once known
+                        u'node': u'other_node',
+                        u'balance': D(u'0.00'),
+                        u'upper_limit': D(u'150.00'),
+                        u'lower_limit': D(u'-50.00'),
+                        u'limits_expiry_time': None,}
+
+        for node, address in zip(nodes, addresses):
+            create_node(node)
+            create_address(address)
+
+        create_account(init_acct)
+        recv_data = urlopen('/accounts')
+        expected_data = init_acct.copy()
+        req_data = {}
+        from ripplebase.account.resources import account_request_fields
+        for field, req_field in account_request_fields.items():
+            req_data[req_field] = init_acct[field]
+            del expected_data[field]
+        req_data['relationship'] = recv_data[0]['relationship']
+        expected_data['relationship'] = req_data['relationship']
+        expected_data['is_active'] = False
+        self.process_recv_data(recv_data[0])
+        self.assertEquals(recv_data[0], expected_data)
+
+        recv_data = urlopen('/accounts/%s' % init_acct['name'])
+        self.process_recv_data(recv_data)
+        self.assertEquals(recv_data, expected_data)
+        
+        # check request
+
+        # create other account
+
+        # check other account
+
+        # check other request is gone
+
+        # check original account status
+
+    def process_recv_data(self, recv_data):
+        effective_time = recv_data['limits_effective_time']
+        del recv_data['limits_effective_time']
+        try:
+            time.strptime(effective_time,
+                          '%s %s' % (json.RippleJSONEncoder.DATE_FORMAT,
+                                     json.RippleJSONEncoder.TIME_FORMAT))
+        except ValueError, ve:
+            self.fail("Invalid 'limits_effective_time' returned: '%s'."
+                      "Error was: %s." % (effective_time, ve))
+        for field in self.acct_decimal_fields:
+            recv_data[field] = D(recv_data[field])
+    

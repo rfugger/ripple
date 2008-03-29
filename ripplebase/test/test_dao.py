@@ -246,6 +246,7 @@ class AccountDAOTest(DAOTest):
         {'name': u'my_account',
          'relationship': 0,
          'node': NodeDAOTest.data[0]['name'],
+         'is_active': False,
          'balance': D('0.00'),
          'upper_limit': D('100.00'),
          'lower_limit': D('-50.00'),
@@ -257,14 +258,15 @@ class AccountDAOTest(DAOTest):
         {},
         {'name': u'my_account'},
         {'node': NodeDAOTest.data[0]['name'],},
+        {'is_active': True},
+        {'is_active': False, 'name': u'my_account',
+         'node': NodeDAOTest.data[0]['name']},        
     ]
     
     @classmethod
     def create(cls):
         NodeDAOTest.create()
-        from ripplebase.account.tables import RELATIONSHIP_STATUS
-        RelationshipDAO.create(id=cls.data[0]['relationship'],
-                               status=RELATIONSHIP_STATUS['invited'])
+        RelationshipDAO.create(id=cls.data[0]['relationship'])
         super(AccountDAOTest, cls).create()
         
 class AccountRequestDAOTest(DAOTest):
@@ -291,8 +293,6 @@ class AccountRequestDAOTest(DAOTest):
     @classmethod
     def create(cls):
         AddressDAOTest.create()
-        from ripplebase.account.tables import RELATIONSHIP_STATUS
-        RelationshipDAO.create(id=cls.data[0]['relationship'],
-                               status=RELATIONSHIP_STATUS['invited'])
+        RelationshipDAO.create(id=cls.data[0]['relationship'])
         super(AccountRequestDAOTest, cls).create()
 

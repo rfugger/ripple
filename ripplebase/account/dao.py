@@ -67,7 +67,6 @@ class RelationshipDAO(db.DAO):
     model = Relationship
     db_fields = {
         'id': 'id',
-        'status': 'status',
     }
     keys = ['id']
         
@@ -77,6 +76,7 @@ class AccountDAO(db.DAO):
         'name': 'name',
         'relationship': 'relationship',
         'node': 'node',
+        'is_active': 'is_active',
         'balance': 'balance',
         'upper_limit': None,  # maps to AccountLimits.upper_limit
         'lower_limit': None,  # maps to AccountLimits.lower_limit

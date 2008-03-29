@@ -116,58 +116,67 @@ class ObjectResource(object):
     def get(self, request, *keys):
         "Returns data_dict for object."
         keys = [unicode(key) for key in keys]
-        return self.DAO.get(*keys).data_dict()
+        return self.get_data_dict(*keys)
 
     def post(self, request, *keys):
         return NotImplemented
 
     def delete(self, request, *keys):
         return NotImplemented
-        
+
+    def get_data_dict(self, *keys):
+        return self.DAO.get(*keys).data_dict()        
+    
 def de_unicodify_keys(d):
     "Makes dict keys regular strings so it can be used for kwargs."
     return dict((str(key), value) for key, value in d.items())
 
 # for inclusion in classes below
-def add_client(self, data_dict):
+def process_incoming(self, data_dict):
     "Add client key to data_dict."
-    # *** replace with actual client
-    from ripplebase import settings
-    data_dict['client'] = settings.TEST_CLIENT
+    if 'client' in self.DAO.db_fields:
+        # *** replace with actual client
+        from ripplebase import settings
+        data_dict['client'] = settings.TEST_CLIENT
 
-def strip_client(self, data_dict):
+def process_outgoing(self, data_dict):
     "Remove client from data_dict."
-    del data_dict['client']
+    if 'client' in data_dict:
+        del data_dict['client']
 
 class ClientFieldAwareObjectListResource(ObjectListResource):
     """For DAOs that have a client field, which is implicit
     in the API, since the server knows who the client is already.
     """
-    add_client = add_client
-    strip_client = strip_client
+    process_incoming = process_incoming
+    process_outgoing = process_outgoing
 
     def create(self, data_dict):
         "Add client key to data_dict."
-        self.add_client(data_dict)
-        super(ClientFieldAwareObjectListResource, self).create(data_dict)
+        self.process_incoming(data_dict)
+        return super(ClientFieldAwareObjectListResource, self).create(data_dict)
 
     def filter(self):
-        # *** replace with actual client
-        from ripplebase import settings
-        client = settings.TEST_CLIENT
-        for obj in self.DAO.filter(client=client):
+        if 'client' in self.DAO.db_fields:
+            # *** replace with actual client
+            from ripplebase import settings
+            client = settings.TEST_CLIENT
+            filter_kwargs = {self.DAO.db_fields['client']: client}
+        else:
+            filter_kwargs = {}
+        for obj in self.DAO.filter(**filter_kwargs):
             d = obj.data_dict()
-            self.strip_client(d)
+            self.process_outgoing(d)
             yield d
     
 class ClientFieldAwareObjectResource(ObjectResource):
     # reuse methods
-    add_client = add_client
-    strip_client = strip_client
+    process_incoming = process_incoming
+    process_outgoing = process_outgoing
 
-    def get(self, request, key):
+    def get_data_dict(self, *keys):
         "Restrict to calling client; remove client field."
-        d = super(ClientFieldAwareObjectResource, self).get(request, key)
-        self.strip_client(d)
+        d = super(ClientFieldAwareObjectResource, self).get_data_dict(*keys)
+        self.process_outgoing(d)
         return d
     
