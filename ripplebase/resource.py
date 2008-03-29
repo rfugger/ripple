@@ -36,6 +36,9 @@ def compile_urls(raw_urls):
     return urls
 
 class SiteResource(resource.Resource):
+    """Implements a framework for storing URLs in django-like fashion,
+    as regex's, and dispatches calls to the corresponding resources.
+    """
     isLeaf = True
     
     def __init__(self, urls):
@@ -53,42 +56,74 @@ class SiteResource(resource.Resource):
                     args = ()  # empty tuple
                 else:
                     args = match.groups()
-                return url.callback(request, *args, **kwargs)
+                if issubclass(url.callback, RequestHandler):
+                    callable = url.callback(request)
+                else:
+                    callable = url.callback
+                content = callable(request, *args, **kwargs)
+                return content
 
 class JSONSiteResource(SiteResource):
+    "Automatically handles JSON encoding and decoding and headers."
     def render(self, request):
+        # handle incoming data
+        content = request.content.read()
+        if content:
+            request.parsed_content = json.decode(content)
+        
+        # handle outgoing data
         request.setHeader("Content-type",
                           'application/json; charset=utf-8')
         body = SiteResource.render(self, request)
         json_body = json.encode(body)
         return json_body.encode('utf-8')  # twisted web expects regular str
 
-# *** Maybe make __call__ a classmethod for the next two classes
-#     and have it create an instance populated with request and related data
-#     such as a client object.  Either that or just add in 'client' to request
-#     and pass it wherever client is needed, which might get unwieldy.
-class ObjectListResource(object):
-    "Resource for CRUD on a particular API data model."
-    allowedMethods = ('GET', 'POST')
 
-    # Set in subclasses
-    DAO = None
-
-    def __call__(self, request):
+class RequestHandler(object):
+    "Generic HTTP resource callable from url framework."
+    allowedMethods = ('GET', 'POST', 'DELETE', 'PUT', 'HEAD')
+    
+    def __init__(self, request):
+        self.request = request
+        # *** replace with actual client
+        from ripplebase import settings
+        self.client = settings.TEST_CLIENT
+    
+    def __call__(self, request, *args, **kwargs):
+        "Creates resource object and calls appropriate method for this request."
         if request.method not in self.allowedMethods:
             raise server.UnsupportedMethod(getattr(self, 'allowedMethods', ()))
-        return getattr(self, request.method.lower())(request)
+        return getattr(self, request.method.lower())(*args, **kwargs)
+
+    def get(self, *args, **kwargs):
+        return NotImplemented
+    def post(self, *args, **kwargs):
+        return NotImplemented
+    def delete(self, *args, **kwargs):
+        return NotImplemented
+    def put(self, *args, **kwargs):
+        return NotImplemented
+    def head(self, *args, **kwargs):
+        # Twisted handles HEAD internally if we just do a GET.
+        return self.get(request, *args, **kwargs)
+
+
+class ObjectListHandler(RequestHandler):
+    "Handler for CRUD on a particular API data model."
+    allowedMethods = ('GET', 'POST', 'HEAD')
     
-    def get(self, request):
+    # Set in subclasses
+    DAO = None
+    
+    def get(self):
         "Render list of objects."
         return list(self.filter())
 
-    def post(self, request):
+    def post(self):
         "Create new object."
-        content = request.content.read()
-        data_dict = de_unicodify_keys(json.decode(content))
+        data_dict = de_unicodify_keys(self.request.parsed_content)
         self.create(data_dict)
-        request.setResponseCode(http.CREATED)
+        self.request.setResponseCode(http.CREATED)
 
     def create(self, data_dict):
         obj = self.DAO.create(**data_dict)
@@ -99,29 +134,23 @@ class ObjectListResource(object):
         for obj in self.DAO.filter():
             yield obj.data_dict()
 
-class ObjectResource(object):
-    """Resource for actions on a single object.
+class ObjectHandler(RequestHandler):
+    """Handler for actions on a single object.
     """
-    allowedMethods = ('GET', 'POST', 'DELETE')
+    allowedMethods = ('GET', 'POST', 'DELETE', 'HEAD')
 
     # set in subclasses
     DAO = None
-    
-    def __call__(self, request, *keys):
-        "Calls appropriate method for this request."
-        if request.method not in self.allowedMethods:
-            raise server.UnsupportedMethod(getattr(self, 'allowedMethods', ()))
-        return getattr(self, request.method.lower())(request, *keys)
-    
-    def get(self, request, *keys):
+
+    def get(self, *keys):
         "Returns data_dict for object."
         keys = [unicode(key) for key in keys]
         return self.get_data_dict(*keys)
 
-    def post(self, request, *keys):
+    def post(self, *keys):
         return NotImplemented
 
-    def delete(self, request, *keys):
+    def delete(self, *keys):
         return NotImplemented
 
     def get_data_dict(self, *keys):
@@ -135,16 +164,14 @@ def de_unicodify_keys(d):
 def process_incoming(self, data_dict):
     "Add client key to data_dict."
     if 'client' in self.DAO.db_fields:
-        # *** replace with actual client
-        from ripplebase import settings
-        data_dict['client'] = settings.TEST_CLIENT
+        data_dict['client'] = self.client
 
 def process_outgoing(self, data_dict):
     "Remove client from data_dict."
     if 'client' in data_dict:
         del data_dict['client']
 
-class ClientFieldAwareObjectListResource(ObjectListResource):
+class ClientFieldAwareObjectListHandler(ObjectListHandler):
     """For DAOs that have a client field, which is implicit
     in the API, since the server knows who the client is already.
     """
@@ -154,14 +181,11 @@ class ClientFieldAwareObjectListResource(ObjectListResource):
     def create(self, data_dict):
         "Add client key to data_dict."
         self.process_incoming(data_dict)
-        return super(ClientFieldAwareObjectListResource, self).create(data_dict)
+        return super(ClientFieldAwareObjectListHandler, self).create(data_dict)
 
     def filter(self):
         if 'client' in self.DAO.db_fields:
-            # *** replace with actual client
-            from ripplebase import settings
-            client = settings.TEST_CLIENT
-            filter_kwargs = {self.DAO.db_fields['client']: client}
+            filter_kwargs = {self.DAO.db_fields['client']: self.client}
         else:
             filter_kwargs = {}
         for obj in self.DAO.filter(**filter_kwargs):
@@ -169,14 +193,14 @@ class ClientFieldAwareObjectListResource(ObjectListResource):
             self.process_outgoing(d)
             yield d
     
-class ClientFieldAwareObjectResource(ObjectResource):
+class ClientFieldAwareObjectHandler(ObjectHandler):
     # reuse methods
     process_incoming = process_incoming
     process_outgoing = process_outgoing
 
     def get_data_dict(self, *keys):
         "Restrict to calling client; remove client field."
-        d = super(ClientFieldAwareObjectResource, self).get_data_dict(*keys)
+        d = super(ClientFieldAwareObjectHandler, self).get_data_dict(*keys)
         self.process_outgoing(d)
         return d
     

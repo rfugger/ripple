@@ -23,12 +23,12 @@
 from ripplebase.account import resources as acct
 
 urls = (
-    (r'^/nodes/?$', acct.node_list),
-    (r'^/nodes/([^/]+)/?$', acct.node),
+    (r'^/nodes/?$', acct.NodeListHandler),
+    (r'^/nodes/([^/]+)/?$', acct.NodeHandler),
 
-    (r'^/addresses/?$', acct.address_list),
-    (r'^/addresses/([^/]+)/?$', acct.address),
+    (r'^/addresses/?$', acct.AddressListHandler),
+    (r'^/addresses/([^/]+)/?$', acct.AddressHandler),
 
-    (r'^/accounts/?$', acct.account_list),
-    (r'^/accounts/([^/]+)/?$', acct.account),    
+    (r'^/accounts/?$', acct.AccountListHandler),
+    (r'^/accounts/([^/]+)/?$', acct.AccountHandler),    
 )
