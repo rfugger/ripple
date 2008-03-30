@@ -20,13 +20,15 @@
 # see <http://www.gnu.org/licenses/>.
 ##################
 
+from datetime import datetime
+
 from ripplebase.account.mappers import *
 from ripplebase import db
 
 class ClientDAO(db.DAO):
     model = Client
     db_fields = {
-        'name': 'name',
+        'name': 'name',  # *** map to 'id'?
     }
     keys = ['name']
 
@@ -34,6 +36,7 @@ class NodeDAO(db.DAO):
     model = Node
     db_fields = {
         'name': 'name',  # unique for whole server (encode with client at higher level)
+        # *** map to 'id'?
         'client': 'client',  # maps to Client.name
         'addresses': None,  # maps to m2m association table
     }
@@ -73,7 +76,7 @@ class RelationshipDAO(db.DAO):
 class AccountDAO(db.DAO):
     model = Account
     db_fields = {
-        'name': 'name',
+        'name': 'name',  # *** map to 'id'?
         'relationship': 'relationship',
         'node': 'node',
         'is_active': 'is_active',
@@ -92,7 +95,7 @@ class AccountDAO(db.DAO):
     limits_map = {
         'upper_limit': 'upper_limit',
         'lower_limit': 'lower_limit',
-        'limits_effective_time': 'effective_time',
+        'limits_effective_time': 'effective_time',  # set automatically
         'limits_expiry_time': 'expiry_time',
     }
 
@@ -116,16 +119,21 @@ class AccountDAO(db.DAO):
         Must then set upper, lower limits and effective,
         expiry times before flushing sessions to db.
         """
-        # *** maybe better to set limit attributes in this
-        # function to make sure?
-        # nah, probably ok to treat these attributes like other
-        # account attributes
-        # but maybe should copy old limits attribute values?
         if self.limits:
             self.limits.is_active = False
+            old_limits = self.limits
+        else:
+            old_limits = None
         self.limits = AccountLimits()
         self.limits.is_active = True
         self.limits.account = self.data_obj
+        if old_limits:
+            for attr in self.limits_map.values():
+                setattr(self.limits, attr, getattr(old_limits, attr))
+        # *** may be outstanding transactions using old limits
+        # *** must guard against this when committing transaction!
+        self.limits.effective_time = datetime.now()
+        
     
     def __setattr__(self, attr, value):
         if attr in self.limits_map:
@@ -147,6 +155,13 @@ class AccountDAO(db.DAO):
         else:
             return super(AccountDAO, self).__getattr__(attr)
 
+    def update(self, **kwargs):
+        "Create new limits object if limits are being changed."
+        limits_args = set(kwargs.keys()).intersection(self.limits_map.keys())
+        if limits_args:
+            self.new_limits()
+        super(AccountDAO, self).update(**kwargs)
+        
 class AccountRequestDAO(db.DAO):
     model = AccountRequest
     db_fields = {

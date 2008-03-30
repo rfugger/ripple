@@ -22,7 +22,7 @@ import urllib2 as urllib
 import subprocess
 import os
 import ctypes
-import time
+from datetime import datetime, timedelta
 from decimal import Decimal as D
 
 from twisted.trial import unittest
@@ -30,6 +30,7 @@ from twisted.web import http
 
 import ripplebase
 from ripplebase import db, settings, json
+from ripplebase.account.mappers import AccountLimits
 
 ripplebase_path = ripplebase.__path__[0]
 
@@ -70,15 +71,6 @@ def urlopen(path, data=None, code=http.OK):
         json_response = json.decode(response.read())
         return json_response
 
-def create_node(data_dict):
-    urlopen('/nodes/', data_dict, code=http.CREATED)
-
-def create_address(data_dict):
-    urlopen('/addresses/', data_dict, code=http.CREATED)
-
-def create_account(data_dict):
-    urlopen('/accounts/', data_dict, code=http.CREATED)
-
 class ClientTest(unittest.TestCase):
     acct_decimal_fields = ('balance', 'upper_limit', 'lower_limit')
         
@@ -97,58 +89,84 @@ class ClientTest(unittest.TestCase):
             except AttributeError:  # unix
                 subprocess.Popen(['kill', str(self.server.pid)])
 
+    def check_data(self, url, expected_data):
+        recv_data = urlopen(url)
+        self.assertEquals(recv_data, expected_data)
+
+    def update_and_check(self, update_url, new_data, check_url=None):
+        if check_url is None:
+            check_url = update_url
+        orig_data = urlopen(update_url)
+        urlopen(update_url, new_data)
+        orig_data.update(new_data)
+        self.check_data(check_url, orig_data)
+        
     def test_node(self):
         data_dict = {u'name': u'my_node', u'addresses': []}
-        create_node(data_dict)
+        urlopen('/nodes/', data_dict)
             
         # check node is in list
-        recv_data = urlopen('/nodes')
-        self.assertEquals(recv_data[0], data_dict)
+        self.check_data('/nodes', [data_dict])
 
         # check node is at own url
-        recv_data = urlopen('/nodes/my_node/')
-        self.assertEquals(recv_data, data_dict)
+        self.check_data('/nodes/my_node/', data_dict)
 
         # update node a few times and check
-        data_dict = {u'name': u'new_name'}
-        urlopen('/nodes/my_node', data_dict)
-        recv_data = urlopen('/nodes/new_name')
-        data_dict['addresses'] = []
-        self.assertEquals(recv_data, data_dict)
-        create_address({u'address': u'my_address'})
-        data_dict = {u'addresses': [u'my_address']}
-        urlopen('/nodes/new_name', data_dict)
-        recv_data = urlopen('/nodes/new_name/')
-        data_dict['name'] = u'new_name'
-        self.assertEquals(recv_data, data_dict)
+        self.update_and_check('/nodes/my_node',
+                              {u'name': u'new_name'},
+                              '/nodes/new_name')
+        urlopen('/addresses/', {u'address': u'my_address'})
+        self.update_and_check('/nodes/new_name',
+                              {u'addresses': [u'my_address']})
+        self.update_and_check('/nodes/new_name',
+                              {u'name': u'old_name'},
+                              '/nodes/old_name')        
 
     def test_address(self):
          node_dict = {u'name': u'my_node'}
          address_dict = {u'address': u'my_address',
                          u'nodes': [u'my_node']}
-         create_node(node_dict)
-         create_address(address_dict)
+         urlopen('/nodes/', node_dict)
+         urlopen('/addresses/', address_dict)
 
          # check list
-         recv_data = urlopen('/addresses')
-         self.assertEquals(recv_data[0], address_dict)
+         self.check_data('/addresses', [address_dict])
          
          # check url
-         recv_data = urlopen('/addresses/my_address/')
-         self.assertEquals(recv_data, address_dict)
+         self.check_data('/addresses/my_address/', address_dict)
 
          # update a few times and check
-         data_dict = {u'address': u'new_address'}
-         urlopen('/addresses/my_address', data_dict)
-         recv_data = urlopen('/addresses/new_address')
-         data_dict['nodes'] = address_dict['nodes']
-         self.assertEquals(recv_data, data_dict)
-         create_node({u'name': u'nother_node'})
-         data_dict = {u'nodes': [u'nother_node']}
-         urlopen('/addresses/new_address/', data_dict)
-         recv_data = urlopen('/addresses/new_address/')
-         data_dict['address'] = u'new_address'
-         self.assertEquals(recv_data, data_dict)
+         self.update_and_check('/addresses/my_address',
+                               {u'address': u'new_address'},
+                               '/addresses/new_address')
+         urlopen('/nodes/', {u'name': u'nother_node'})
+         self.update_and_check('/addresses/new_address',
+                               {u'nodes': [u'nother_node']})
+
+    def check_account_data(self, url, expected_data, min_effective_time=None):
+        recv_data = urlopen(url)
+        self.process_acct_recv_data(recv_data)
+        self.assertEquals(recv_data, expected_data)
+
+    def update_and_check_account(self, update_url, new_data, check_url=None):
+        if check_url is None:
+            check_url = update_url
+        orig_data = urlopen(update_url)
+        self.process_acct_recv_data(orig_data)
+        urlopen(update_url, new_data)
+        orig_data.update(new_data)
+        self.check_account_data(check_url, orig_data)
+         
+    def process_acct_recv_data(self, recv_data):
+        effective_time = recv_data['limits_effective_time']
+        try:
+            eff_datetime = str_to_datetime(effective_time)
+        except ValueError, ve:
+            self.fail("Invalid 'limits_effective_time' returned: '%s'."
+                      "Error was: %s." % (effective_time, ve))
+        del recv_data['limits_effective_time']
+        for field in self.acct_decimal_fields:
+            recv_data[field] = D(recv_data[field])
 
     def test_account(self):
         nodes = [{u'name': u'my_node'},
@@ -176,10 +194,10 @@ class ClientTest(unittest.TestCase):
                         u'limits_expiry_time': None,}
 
         for node, address in zip(nodes, addresses):
-            create_node(node)
-            create_address(address)
+            urlopen('/nodes/', node)
+            urlopen('/addresses/', address)
 
-        create_account(init_acct)
+        urlopen('/accounts/', init_acct)
         recv_data = urlopen('/accounts')
         expected_data = init_acct.copy()
         req_data = {}
@@ -192,45 +210,48 @@ class ClientTest(unittest.TestCase):
         expected_data['is_active'] = False
         self.process_acct_recv_data(recv_data[0])
         self.assertEquals(recv_data[0], expected_data)
-
-        recv_data = urlopen('/accounts/%s' % init_acct['name'])
-        self.process_acct_recv_data(recv_data)
-        self.assertEquals(recv_data, expected_data)
+        
+        self.check_account_data('/accounts/my_account/', expected_data)
         
         # check request
-        recv_data = urlopen('/accountrequests')
-        self.assertEquals(recv_data[0], req_data)
+        self.check_data('/accountrequests', [req_data])
 
         # create other account
         partner_acct['relationship'] = req_data['relationship']
-        create_account(partner_acct)
+        urlopen('/accounts/', partner_acct)
 
         # check other account
-        recv_data = urlopen('/accounts/%s' % partner_acct['name'])
-        self.process_acct_recv_data(recv_data)
-        expected_data = partner_acct.copy()
-        expected_data['is_active'] = True
-        self.assertEquals(recv_data, expected_data)
+        expected_partner_data = partner_acct.copy()
+        expected_partner_data['is_active'] = True
+        self.check_account_data('/accounts/other_account/', expected_partner_data)
         
         # check request is gone
-        recv_data = urlopen('/accountrequests/')
-        self.assertEquals(recv_data, [])
+        self.check_data('/accountrequests/', [])
         
         # check original account status
-        recv_data = urlopen('/accounts/%s' % init_acct['name'])
-        self.process_acct_recv_data(recv_data)
-        self.assertEquals(recv_data['is_active'], True)
+        expected_data['is_active'] = True
+        self.check_account_data('/accounts/my_account', expected_data)
 
-    def process_acct_recv_data(self, recv_data):
-        effective_time = recv_data['limits_effective_time']
-        del recv_data['limits_effective_time']
-        try:
-            time.strptime(effective_time,
-                          '%s %s' % (json.RippleJSONEncoder.DATE_FORMAT,
-                                     json.RippleJSONEncoder.TIME_FORMAT))
-        except ValueError, ve:
-            self.fail("Invalid 'limits_effective_time' returned: '%s'."
-                      "Error was: %s." % (effective_time, ve))
-        for field in self.acct_decimal_fields:
-            recv_data[field] = D(recv_data[field])
-    
+        # update account in a few ways
+        self.update_and_check_account('/accounts/my_account/',
+                                      {u'name': u'new_account'},
+                                      '/accounts/new_account')
+        urlopen('/nodes/', {u'name': u'node2'})
+        self.update_and_check_account('/accounts/new_account',
+                                      {u'node': u'node2',
+                                       u'upper_limit': D('823.00102')})
+        # make sure old limits got stored
+        limits = AccountLimits.query().order_by('effective_time')
+        old_limits = limits[0]
+        new_limits = limits[2]
+        self.assertEquals(old_limits.upper_limit, init_acct['upper_limit'])
+        self.assertEquals(new_limits.upper_limit, D('823.00102'))
+        self.failUnless(old_limits.effective_time < new_limits.effective_time)
+        self.failUnless(old_limits.is_active == False)
+        self.failUnless(new_limits.is_active)
+
+        # *** do some more various updating here
+        
+def str_to_datetime(s):
+    return datetime.strptime(s, '%s %s' % (json.RippleJSONEncoder.DATE_FORMAT,
+                                           json.RippleJSONEncoder.TIME_FORMAT))

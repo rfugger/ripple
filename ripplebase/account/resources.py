@@ -18,8 +18,6 @@
 # see <http://www.gnu.org/licenses/>.
 ##################
 
-from datetime import datetime
-
 from twisted.web import resource
 
 from ripplebase.resource import *
@@ -105,11 +103,17 @@ class AccountListHandler(RippleObjectListHandler):
             init_acct = AccountDAO.filter(relationship=data_dict['relationship'])[0]
             init_acct.is_active = True  # gets committed later
 
-        data_dict['limits_effective_time'] = datetime.now()
         super(RippleObjectListHandler, self).create(data_dict)
     
 class AccountHandler(RippleObjectHandler):
     DAO = AccountDAO
+
+    def update(self, keys, data_dict):
+        if 'limits_effective_time' in data_dict:
+            raise ValueError("'limits_effective_time' is read-only.")
+        if 'relationship' in data_dict:
+            raise ValueError("'relationship' is read-only.")
+        super(AccountHandler, self).update(keys, data_dict)
 
 class AccountRequestListHandler(ObjectListHandler):
     allowedMethods = ('GET', 'HEAD')

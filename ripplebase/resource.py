@@ -20,7 +20,7 @@
 
 import re
 
-from twisted.web import resource, http, server
+from twisted.web import resource, server
 
 from ripplebase import db, json
 
@@ -131,8 +131,6 @@ class ObjectListHandler(RequestHandler):
         data_dict = de_unicodify_keys(self.request.parsed_content)
         self.process_incoming(data_dict)
         self.create(data_dict)
-        # *** maybe just return 200 OK?
-        self.request.setResponseCode(http.CREATED)
 
     def create(self, data_dict):
         obj = self.DAO.create(**data_dict)
