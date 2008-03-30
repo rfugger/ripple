@@ -22,15 +22,8 @@ from datetime import datetime
 
 from twisted.web import resource
 
-from ripplebase.resource import (ObjectListHandler, ObjectHandler,
-                                 ClientFieldAwareObjectListHandler,
-                                 ClientFieldAwareObjectHandler)
+from ripplebase.resource import *
 from ripplebase.account.dao import *
-
-def encode_node_name(node_name, client_id):
-    return '%s/%s' % (client_id, node_name)
-def decode_node_name(encoded_node_name):
-    return encoded_node_name[encoded_node_name.find('/') + 1:]
 
 
 def node_process_incoming(self, d):
@@ -43,12 +36,12 @@ def node_process_outgoing(self, d):
     if 'name' in d:
         d['name'] = decode_node_name(d['name'])
 
-class NodeListHandler(ClientFieldAwareObjectListHandler):
+class NodeListHandler(RippleObjectListHandler):
     DAO = NodeDAO
     process_incoming = node_process_incoming
     process_outgoing = node_process_outgoing
 
-class NodeHandler(ClientFieldAwareObjectHandler):
+class NodeHandler(RippleObjectHandler):
     DAO = NodeDAO
     process_incoming = node_process_incoming
     process_outgoing = node_process_outgoing
@@ -74,12 +67,12 @@ def address_process_outgoing(self, data_dict):
         data_dict['nodes'] = [decode_node_name(node) for node
                               in data_dict.get('nodes', ())]
 
-class AddressListHandler(ClientFieldAwareObjectListHandler):
+class AddressListHandler(RippleObjectListHandler):
     DAO = AddressDAO
     process_incoming = address_process_incoming
     process_outgoing = address_process_outgoing
 
-class AddressHandler(ClientFieldAwareObjectHandler):
+class AddressHandler(RippleObjectHandler):
     DAO = AddressDAO
     process_incoming = address_process_incoming
     process_outgoing = address_process_outgoing
@@ -91,41 +84,32 @@ account_request_fields = {
     'note': 'note',
 }
 
-def account_process_incoming(self, data_dict):
-    # *** only create, update not handled yet
-    if 'relationship' not in data_dict:
-        # create relationship and account request
-        rel = RelationshipDAO.create()
-        data_dict['relationship'] = rel.id
-        req_dict = {'relationship': rel.id}
-        for key, req_key in account_request_fields.items():
-            req_dict[req_key] = data_dict[key]
-            del data_dict[key]
-        req = AccountRequestDAO.create(**req_dict)
-        data_dict['is_active'] = False
-    else:  # confirming account by creating dual account
-        # *** maybe ought to wait for exchanges before activating acct?
-        data_dict['is_active'] = True
-        AccountRequestDAO.delete(data_dict['relationship'])
-        init_acct = AccountDAO.filter(relationship=data_dict['relationship'])[0]
-        init_acct.is_active = True  # gets committed later
-        
-    # *** this is only good for create, not for update
-    data_dict['limits_effective_time'] = datetime.now()
-    data_dict['node'] = encode_node_name(data_dict['node'], self.client)
+class AccountListHandler(RippleObjectListHandler):
+    DAO = AccountDAO
 
-def account_process_outgoing(self, data_dict):
-    data_dict['node'] = decode_node_name(data_dict['node'])
+    def create(self, data_dict):
+        if 'relationship' not in data_dict:
+            # create relationship and account request
+            rel = RelationshipDAO.create()
+            data_dict['relationship'] = rel.id
+            req_dict = {'relationship': rel.id}
+            for key, req_key in account_request_fields.items():
+                req_dict[req_key] = data_dict[key]
+                del data_dict[key]
+            req = AccountRequestDAO.create(**req_dict)
+            data_dict['is_active'] = False
+        else:  # confirming account by creating dual account
+            # *** maybe ought to wait for exchanges before activating acct?
+            data_dict['is_active'] = True
+            AccountRequestDAO.delete(data_dict['relationship'])
+            init_acct = AccountDAO.filter(relationship=data_dict['relationship'])[0]
+            init_acct.is_active = True  # gets committed later
+
+        data_dict['limits_effective_time'] = datetime.now()
+        super(RippleObjectListHandler, self).create(data_dict)
     
-class AccountListHandler(ClientFieldAwareObjectListHandler):
+class AccountHandler(RippleObjectHandler):
     DAO = AccountDAO
-    process_incoming = account_process_incoming
-    process_outgoing = account_process_outgoing
-
-class AccountHandler(ClientFieldAwareObjectHandler):
-    DAO = AccountDAO
-    process_incoming = account_process_incoming
-    process_outgoing = account_process_outgoing
 
 class AccountRequestListHandler(ObjectListHandler):
     allowedMethods = ('GET', 'HEAD')
@@ -133,4 +117,3 @@ class AccountRequestListHandler(ObjectListHandler):
     
 # class ExchangeHandler(ObjectListHandler):
 #     DAO = ExchangeDAO
-# acct_root.putChild('exchange', ExchangeHandler())

@@ -114,6 +114,13 @@ class ObjectListHandler(RequestHandler):
     
     # Set in subclasses
     DAO = None
+
+    def processing_incoming(self, data_dict):
+        "Alter incoming data_dict."
+        pass
+    def process_outgoing(self, data_dict):
+        "Alter outgoing data_dict."
+        pass
     
     def get(self):
         "Render list of objects."
@@ -122,6 +129,7 @@ class ObjectListHandler(RequestHandler):
     def post(self):
         "Create new object."
         data_dict = de_unicodify_keys(self.request.parsed_content)
+        self.process_incoming(data_dict)
         self.create(data_dict)
         # *** maybe just return 200 OK?
         self.request.setResponseCode(http.CREATED)
@@ -133,7 +141,9 @@ class ObjectListHandler(RequestHandler):
 
     def filter(self):
         for obj in self.DAO.filter():
-            yield obj.data_dict()
+            data_dict = obj.data_dict()
+            self.process_outgoing(data_dict)
+            yield data_dict
 
 class ObjectHandler(RequestHandler):
     """Handler for actions on a single object.
@@ -143,15 +153,25 @@ class ObjectHandler(RequestHandler):
     # set in subclasses
     DAO = None
 
+    def processing_incoming(self, data_dict):
+        "Alter incoming data_dict."
+        pass
+    def process_outgoing(self, data_dict):
+        "Alter outgoing data_dict."
+        pass
+    
     def get(self, *keys):
         "Returns data_dict for object."
         keys = [unicode(key) for key in keys]
-        return self.get_data_dict(*keys)
+        data_dict = self.get_data_dict(*keys)
+        self.process_outgoing(data_dict)
+        return data_dict
 
     def post(self, *keys):
         "Update existing object."
         keys = [unicode(key) for key in keys]
         data_dict = de_unicodify_keys(self.request.parsed_content)
+        self.process_incoming(data_dict)
         self.update(keys, data_dict)
 
     def delete(self, *keys):
@@ -170,18 +190,25 @@ def de_unicodify_keys(d):
     return dict((str(key), value) for key, value in d.items())
 
 
+def encode_node_name(node_name, client_id):
+    return '%s/%s' % (client_id, node_name)
+def decode_node_name(encoded_node_name):
+    return encoded_node_name[encoded_node_name.find('/') + 1:]
+
 # for inclusion in classes below
 def process_incoming(self, data_dict):
-    "Add client key to data_dict."
-    if 'client' in self.DAO.db_fields:
-        data_dict['client'] = self.client
+    "Encode node name to make it unique per client."
+    if 'node' in data_dict:
+        data_dict['node'] = encode_node_name(data_dict['node'], self.client)
 
 def process_outgoing(self, data_dict):
-    "Remove client from data_dict."
+    "Remove client from data_dict, decode node name."
     if 'client' in data_dict:
         del data_dict['client']
+    if 'node' in data_dict:
+        data_dict['node'] = decode_node_name(data_dict['node'])
 
-class ClientFieldAwareObjectListHandler(ObjectListHandler):
+class RippleObjectListHandler(ObjectListHandler):
     """For DAOs that have a client field, which is implicit
     in the API, since the server knows who the client is already.
     """
@@ -190,8 +217,9 @@ class ClientFieldAwareObjectListHandler(ObjectListHandler):
 
     def create(self, data_dict):
         "Add client key to data_dict."
-        self.process_incoming(data_dict)
-        return super(ClientFieldAwareObjectListHandler, self).create(data_dict)
+        if 'client' in self.DAO.db_fields:
+            data_dict['client'] = self.client
+        return super(RippleObjectListHandler, self).create(data_dict)
 
     def filter(self):
         if 'client' in self.DAO.db_fields:
@@ -203,17 +231,8 @@ class ClientFieldAwareObjectListHandler(ObjectListHandler):
             self.process_outgoing(d)
             yield d
     
-class ClientFieldAwareObjectHandler(ObjectHandler):
+class RippleObjectHandler(ObjectHandler):
     # reuse methods
     process_incoming = process_incoming
     process_outgoing = process_outgoing
 
-    def get_data_dict(self, *keys):
-        "Restrict to calling client; remove client field."
-        d = super(ClientFieldAwareObjectHandler, self).get_data_dict(*keys)
-        self.process_outgoing(d)
-        return d
-
-    def update(self, keys, data_dict):
-        self.process_incoming(data_dict)
-        return super(ClientFieldAwareObjectHandler, self).update(keys, data_dict)
