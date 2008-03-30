@@ -22,6 +22,7 @@ import urllib2 as urllib
 import subprocess
 import os
 import ctypes
+import time
 from datetime import datetime, timedelta
 from decimal import Decimal as D
 
@@ -63,7 +64,6 @@ def urlopen(path, data=None, code=http.OK):
         except urllib.URLError, ue:
             if ue.reason.args[0] in (10061, 111):  # connection refused
                 # wait for server to be up
-                import time
                 time.sleep(0.5)
                 continue
             raise
@@ -89,6 +89,10 @@ class ClientTest(unittest.TestCase):
             except AttributeError:  # unix
                 subprocess.Popen(['kill', str(self.server.pid)])
 
+    def test_bad_requests(self):
+        urlopen('/abcdef', code=http.NOT_FOUND)
+        urlopen('/nodes', {u'abcdef': u'mung'}, code=http.INTERNAL_SERVER_ERROR)
+                
     def check_data(self, url, expected_data):
         recv_data = urlopen(url)
         self.assertEquals(recv_data, expected_data)
@@ -237,6 +241,7 @@ class ClientTest(unittest.TestCase):
                                       {u'name': u'new_account'},
                                       '/accounts/new_account')
         urlopen('/nodes/', {u'name': u'node2'})
+        time.sleep(1)  # make sure to get a new timestamp on new limits object
         self.update_and_check_account('/accounts/new_account',
                                       {u'node': u'node2',
                                        u'upper_limit': D('823.00102')})

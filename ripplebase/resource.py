@@ -20,9 +20,12 @@
 
 import re
 
-from twisted.web import resource, server
+from twisted.web import resource, http, server
 
 from ripplebase import db, json
+
+class Http404(Exception):
+    pass
 
 class URL(object):
     def __init__(self, regex_src, callback):
@@ -62,21 +65,29 @@ class SiteResource(resource.Resource):
                     callable = url.callback
                 content = callable(request, *args, **kwargs)
                 return content
+        raise Http404("No resource at '%s'." % request.path)
 
 class JSONSiteResource(SiteResource):
     "Automatically handles JSON encoding and decoding and headers."
     def render(self, request):
-        # handle incoming data
-        content = request.content.read()
-        if content:
-            request.parsed_content = json.decode(content)
+        try:
+            # handle incoming data
+            content = request.content.read()
+            if content:
+                request.parsed_content = json.decode(content)
         
-        # handle outgoing data
-        request.setHeader("Content-type",
+            # handle outgoing data
+            request.setHeader("Content-type",
                           'application/json; charset=utf-8')
-        body = SiteResource.render(self, request)
-        json_body = json.encode(body)
-        return json_body.encode('utf-8')  # twisted web expects regular str
+            body = SiteResource.render(self, request)
+            json_body = json.encode(body).encode('utf-8')  # twisted web expects regular str
+        except Http404, h:
+            request.setResponseCode(http.NOT_FOUND)
+            return str(h)
+        except Exception, e:
+            request.setResponseCode(http.INTERNAL_SERVER_ERROR)
+            return str(e)
+        return json_body
 
 
 class RequestHandler(object):
