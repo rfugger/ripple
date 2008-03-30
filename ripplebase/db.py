@@ -82,12 +82,7 @@ class SimpleDAO(object):
     def create(cls, **kwargs):
         data_obj = cls.model()
         dao = cls(data_obj)
-        for field, value in kwargs.items():
-            # check that field is valid
-            assert field in cls.db_fields.keys(), \
-                "Invalid field: '%s'." % field
-            setattr(dao, field, value)
-        flush()
+        dao.update(**kwargs)
         return dao
 
     def __setattr__(self, attr, value):
@@ -133,6 +128,14 @@ class SimpleDAO(object):
         "Expose API data as a dict."
         return dict([(api_field, getattr(self, api_field))
                      for api_field in self.db_fields.keys()])
+
+    def update(self, **kwargs):
+        for field, value in kwargs.items():
+            # check that field is valid
+            assert field in self.db_fields.keys(), \
+                "Invalid field: '%s'." % field
+            setattr(self, field, value)
+        flush()
         
 
 class DAO(SimpleDAO):

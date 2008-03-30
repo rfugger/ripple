@@ -35,11 +35,13 @@ def decode_node_name(encoded_node_name):
 
 def node_process_incoming(self, d):
     super(self.__class__, self).process_incoming(d)
-    d['name'] = encode_node_name(d['name'], self.client)
+    if 'name' in d:
+        d['name'] = encode_node_name(d['name'], self.client)
 
 def node_process_outgoing(self, d):
     super(self.__class__, self).process_outgoing(d)
-    d['name'] = decode_node_name(d['name'])
+    if 'name' in d:
+        d['name'] = decode_node_name(d['name'])
 
 class NodeListHandler(ClientFieldAwareObjectListHandler):
     DAO = NodeDAO
@@ -56,6 +58,9 @@ class NodeHandler(ClientFieldAwareObjectHandler):
         key = encode_node_name(key, self.client)
         return super(NodeHandler, self).get_data_dict(key)
 
+    def update(self, keys, data_dict):
+        keys = (encode_node_name(keys[0], self.client),)
+        return super(NodeHandler, self).update(keys, data_dict)
 
 def address_process_incoming(self, data_dict):
     super(self.__class__, self).process_incoming(data_dict)

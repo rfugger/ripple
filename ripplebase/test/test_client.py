@@ -109,6 +109,19 @@ class ClientTest(unittest.TestCase):
         recv_data = urlopen('/nodes/my_node/')
         self.assertEquals(recv_data, data_dict)
 
+        # update node a few times and check
+        data_dict = {u'name': u'new_name'}
+        urlopen('/nodes/my_node', data_dict)
+        recv_data = urlopen('/nodes/new_name')
+        data_dict['addresses'] = []
+        self.assertEquals(recv_data, data_dict)
+        create_address({u'address': u'my_address'})
+        data_dict = {u'addresses': [u'my_address']}
+        urlopen('/nodes/new_name', data_dict)
+        recv_data = urlopen('/nodes/new_name/')
+        data_dict['name'] = u'new_name'
+        self.assertEquals(recv_data, data_dict)
+
     def test_address(self):
          node_dict = {u'name': u'my_node'}
          address_dict = {u'address': u'my_address',

@@ -123,6 +123,7 @@ class ObjectListHandler(RequestHandler):
         "Create new object."
         data_dict = de_unicodify_keys(self.request.parsed_content)
         self.create(data_dict)
+        # *** maybe just return 200 OK?
         self.request.setResponseCode(http.CREATED)
 
     def create(self, data_dict):
@@ -148,17 +149,25 @@ class ObjectHandler(RequestHandler):
         return self.get_data_dict(*keys)
 
     def post(self, *keys):
-        return NotImplemented
+        "Update existing object."
+        data_dict = de_unicodify_keys(self.request.parsed_content)
+        self.update(keys, data_dict)
 
     def delete(self, *keys):
         return NotImplemented
 
     def get_data_dict(self, *keys):
         return self.DAO.get(*keys).data_dict()        
-    
+
+    def update(self, keys, data_dict):
+        obj = self.DAO.get(*keys)
+        obj.update(**data_dict)
+        db.commit()
+
 def de_unicodify_keys(d):
     "Makes dict keys regular strings so it can be used for kwargs."
     return dict((str(key), value) for key, value in d.items())
+
 
 # for inclusion in classes below
 def process_incoming(self, data_dict):
@@ -203,4 +212,7 @@ class ClientFieldAwareObjectHandler(ObjectHandler):
         d = super(ClientFieldAwareObjectHandler, self).get_data_dict(*keys)
         self.process_outgoing(d)
         return d
-    
+
+    def update(self, keys, data_dict):
+        self.process_incoming(data_dict)
+        return super(ClientFieldAwareObjectHandler, self).update(keys, data_dict)
