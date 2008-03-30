@@ -64,13 +64,15 @@ class NodeHandler(ClientFieldAwareObjectHandler):
 
 def address_process_incoming(self, data_dict):
     super(self.__class__, self).process_incoming(data_dict)
-    data_dict['nodes'] = [encode_node_name(node, self.client) for node
-                          in data_dict.get('nodes', ())]
+    if 'nodes' in data_dict:
+        data_dict['nodes'] = [encode_node_name(node, self.client) for node
+                              in data_dict.get('nodes', ())]
 
 def address_process_outgoing(self, data_dict):
     super(self.__class__, self).process_outgoing(data_dict)
-    data_dict['nodes'] = [decode_node_name(node) for node
-                          in data_dict.get('nodes', ())]
+    if 'nodes' in data_dict:
+        data_dict['nodes'] = [decode_node_name(node) for node
+                              in data_dict.get('nodes', ())]
 
 class AddressListHandler(ClientFieldAwareObjectListHandler):
     DAO = AddressDAO

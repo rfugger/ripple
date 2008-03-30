@@ -150,6 +150,7 @@ class ObjectHandler(RequestHandler):
 
     def post(self, *keys):
         "Update existing object."
+        keys = [unicode(key) for key in keys]
         data_dict = de_unicodify_keys(self.request.parsed_content)
         self.update(keys, data_dict)
 
