@@ -68,8 +68,10 @@ def urlopen(path, data=None, code=http.OK):
                 continue
             raise
     if response:
-        json_response = json.decode(response.read())
-        return json_response
+        response = response.read()
+        if response:
+            json_response = json.decode(response)
+            return json_response
 
 class ClientTest(unittest.TestCase):
     acct_decimal_fields = ('balance', 'upper_limit', 'lower_limit')

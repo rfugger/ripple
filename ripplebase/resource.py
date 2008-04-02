@@ -21,8 +21,9 @@
 import re
 
 from twisted.web import resource, http, server
+from twisted.internet import threads
 
-from ripplebase import db, json
+from ripplebase import db, json, settings
 
 class Http404(Exception):
     pass
@@ -72,23 +73,48 @@ class JSONSiteResource(SiteResource):
     def render(self, request):
         try:
             # handle incoming data
+            if settings.DEBUG: print '\n', request.path
             content = request.content.read()
             if content:
                 request.parsed_content = json.decode(content)
-        
+                if settings.DEBUG: print content
+            if settings.DEBUG: print db.session
             # handle outgoing data
             request.setHeader("Content-type",
                           'application/json; charset=utf-8')
             body = SiteResource.render(self, request)
-            json_body = json.encode(body).encode('utf-8')  # twisted web expects regular str
         except Http404, h:
             request.setResponseCode(http.NOT_FOUND)
-            return str(h)
-        except Exception, e:
+            body = str(h)
+        except Exception, e:  # *** this might be dangerous
             request.setResponseCode(http.INTERNAL_SERVER_ERROR)
-            return str(e)
-        return json_body
+            body = str(e)
+        # close out db session -- very important with threads
+        db.session.close()
+        if body not in (None, ''):
+            json_body = encode_response(body)
+            if settings.DEBUG:
+                print json_body
+            return json_body
+        return ''
 
+def encode_response(response):
+    # twisted web expects regular str, which encode('utf-8') gives
+    return json.encode(response).encode('utf-8')
+    
+class ThreadedJSONSiteResource(JSONSiteResource):
+    "Run each request in its own thread."
+    def render(self, request):
+        d = threads.deferToThread(JSONSiteResource.render, self, request)
+        def callback(response):
+            request.write(response)
+            request.finish()
+        def errback(failure):
+            request.write(encode_response(str(failure)))
+            request.finish()
+        d.addCallbacks(callback, errback)
+        return server.NOT_DONE_YET
+        
 
 class RequestHandler(object):
     "Generic HTTP resource callable from url framework."
@@ -97,7 +123,6 @@ class RequestHandler(object):
     def __init__(self, request):
         self.request = request
         # *** replace with actual client
-        from ripplebase import settings
         self.client = settings.TEST_CLIENT
     
     def __call__(self, request, *args, **kwargs):
