@@ -8,6 +8,7 @@ SCALE = None
 
 #DB_CONNECT_STR = 'sqlite://'
 DB_CONNECT_STR = 'sqlite:///ripplebase.db'
+#DB_CONNECT_STR = 'postgres://ripple:ripple@localhost/ripplebase'
 
 HTTP_PORT = 8080
 

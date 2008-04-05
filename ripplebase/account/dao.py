@@ -1,26 +1,51 @@
 "API resource -> data object mappers."
 
+##################
+# Copyright 2008, Ryan Fugger
+#
+# This file is part of Ripplebase.
+#
+# Ripplebase is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as 
+# published by the Free Software Foundation, either version 3 of the 
+# License, or (at your option) any later version.
+#
+# Ripplebase is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public 
+# License along with Ripplebase, in the file LICENSE.txt.  If not,
+# see <http://www.gnu.org/licenses/>.
+##################
+
+from datetime import datetime
+
 from ripplebase.account.mappers import *
 from ripplebase import db
 
 class ClientDAO(db.DAO):
     model = Client
     db_fields = {
-        'name': 'name',
+        'name': 'name',  # *** map to 'id'?
     }
     keys = ['name']
 
 class NodeDAO(db.DAO):
     model = Node
     db_fields = {
-        'name': 'name',
+        'name': 'name',  # unique for whole server (encode with client at higher level)
+        # *** map to 'id'?
         'client': 'client',  # maps to Client.name
+        'addresses': None,  # maps to m2m association table
     }
-    keys = ['name', 'client']
+    keys = ['name']
     fk_daos = {
         'client': ClientDAO,
     }
-        
+    # m2m_daos after AddressDAO, because it needs it.
+
 class AddressDAO(db.DAO):
     model = Address
     db_fields = {
@@ -28,43 +53,33 @@ class AddressDAO(db.DAO):
         'client': 'client',  # maps to Client.name
         'nodes': None,  # maps to m2m association table
     }
-    keys = ['address', 'client']
+    keys = ['address']
     fk_daos = {
         'client': ClientDAO,
     }
+    m2m_daos = {
+        'nodes': NodeDAO,
+    }
 
-    def __setattr__(self, attr, value):
-        if attr == 'nodes':
-            self.data_obj.nodes = []
-            for node_name in value:  # value is list of node names
-                node_dao = NodeDAO.get(node_name)
-                # ensure node client matches address client
-                # *** maybe better done elsewhere?
-                if self.client:
-                    assert self.client == node_dao.client, \
-                        "Invalid node: '%s'." % node_name
-                self.data_obj.nodes.append(node_dao.data_obj)
-        else:
-            # check that self.client matches all node clients
-            # *** maybe better done elsewhere?
-            if attr == 'client':
-                for node in self.data_obj.nodes:  # list of Node
-                    # value is client name
-                    assert value == node.client.name, \
-                        "Invalid node: '%s'." % node.name
-            super(AddressDAO, self).__setattr__(attr, value)
+# must define this after defining AddressDAO
+NodeDAO.m2m_daos = {
+    'addresses': AddressDAO,
+}
 
-    def __getattr__(self, attr):
-        if attr == 'nodes':
-            return [node.name for node in self.data_obj.nodes]
-        else:
-            return super(AddressDAO, self).__getattr__(attr)
-    
+class RelationshipDAO(db.DAO):
+    model = Relationship
+    db_fields = {
+        'id': 'id',
+    }
+    keys = ['id']
+        
 class AccountDAO(db.DAO):
     model = Account
     db_fields = {
-        'name': 'name',
+        'name': 'name',  # *** map to 'id'?
+        'relationship': 'relationship',
         'node': 'node',
+        'is_active': 'is_active',
         'balance': 'balance',
         'upper_limit': None,  # maps to AccountLimits.upper_limit
         'lower_limit': None,  # maps to AccountLimits.lower_limit
@@ -73,13 +88,14 @@ class AccountDAO(db.DAO):
     }
     keys = ['name']
     fk_daos = {
+        'relationship': RelationshipDAO,
         'node': NodeDAO,
     }
 
     limits_map = {
         'upper_limit': 'upper_limit',
         'lower_limit': 'lower_limit',
-        'limits_effective_time': 'effective_time',
+        'limits_effective_time': 'effective_time',  # set automatically
         'limits_expiry_time': 'expiry_time',
     }
 
@@ -103,16 +119,21 @@ class AccountDAO(db.DAO):
         Must then set upper, lower limits and effective,
         expiry times before flushing sessions to db.
         """
-        # *** maybe better to set limit attributes in this
-        # function to make sure?
-        # nah, probably ok to treat these attributes like other
-        # account attributes
-        # but maybe should copy old limits attribute values?
         if self.limits:
             self.limits.is_active = False
+            old_limits = self.limits
+        else:
+            old_limits = None
         self.limits = AccountLimits()
         self.limits.is_active = True
         self.limits.account = self.data_obj
+        if old_limits:
+            for attr in self.limits_map.values():
+                setattr(self.limits, attr, getattr(old_limits, attr))
+        # *** may be outstanding transactions using old limits
+        # *** must guard against this when committing transaction!
+        self.limits.effective_time = datetime.now()
+        
     
     def __setattr__(self, attr, value):
         if attr in self.limits_map:
@@ -121,14 +142,42 @@ class AccountDAO(db.DAO):
                 self.new_limits()
             setattr(self.limits, self.limits_map[attr], value)
         else:
+            # *** create new relationship object if doesn't exist?
+            #     or handle at higher level?
             super(AccountDAO, self).__setattr__(attr, value)
 
     def __getattr__(self, attr):
         if attr in self.limits_map:
-            return getattr(self.limits, self.limits_map[attr])
+            if self.limits:
+                return getattr(self.limits, self.limits_map[attr])
+            else:
+                return None
         else:
             return super(AccountDAO, self).__getattr__(attr)
 
+    def update(self, **kwargs):
+        "Create new limits object if limits are being changed."
+        limits_args = set(kwargs.keys()).intersection(self.limits_map.keys())
+        if limits_args:
+            self.new_limits()
+        super(AccountDAO, self).update(**kwargs)
+        
+class AccountRequestDAO(db.DAO):
+    model = AccountRequest
+    db_fields = {
+        'relationship': 'relationship',
+        'source_address': 'source_address',
+        'dest_address': 'dest_address',
+        'note': 'note',
+    }
+    # FK key won't work if another DAO wants to reference this DAO
+    keys = ['relationship']
+    fk_daos = {
+        'relationship': RelationshipDAO,
+        'source_address': AddressDAO,
+        'dest_address': AddressDAO,
+    }
+    
 class ExchangeDAO(db.DAO):
     model = Exchange
     db_fields = {
@@ -136,12 +185,13 @@ class ExchangeDAO(db.DAO):
         'target_account': 'target_account',
         'rate': 'rate',
     }
-    # nothing refers to this, so don't need keys
+    # FK keys/dual keys won't work if another DAO wants to reference this DAO
+    keys = ['source_account', 'target_account']
     fk_daos = {
         'source_account': AccountDAO,
         'target_account': AccountDAO,
     }
-        
+
 
 class ExchangeRateDAO(db.DAO):
     model = ExchangeRate
@@ -154,3 +204,5 @@ class ExchangeRateDAO(db.DAO):
     keys = ['name']
 
     # *** handle nonstandard fields
+
+    

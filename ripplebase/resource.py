@@ -1,8 +1,32 @@
+##################
+# Copyright 2008, Ryan Fugger
+#
+# This file is part of Ripplebase.
+#
+# Ripplebase is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as 
+# published by the Free Software Foundation, either version 3 of the 
+# License, or (at your option) any later version.
+#
+# Ripplebase is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public 
+# License along with Ripplebase, in the file LICENSE.txt.  If not,
+# see <http://www.gnu.org/licenses/>.
+##################
+
 import re
 
 from twisted.web import resource, http, server
+from twisted.internet import threads
 
-from ripplebase import db, json
+from ripplebase import db, json, settings
+
+class Http404(Exception):
+    pass
 
 class URL(object):
     def __init__(self, regex_src, callback):
@@ -16,6 +40,9 @@ def compile_urls(raw_urls):
     return urls
 
 class SiteResource(resource.Resource):
+    """Implements a framework for storing URLs in django-like fashion,
+    as regex's, and dispatches calls to the corresponding resources.
+    """
     isLeaf = True
     
     def __init__(self, urls):
@@ -33,70 +60,113 @@ class SiteResource(resource.Resource):
                     args = ()  # empty tuple
                 else:
                     args = match.groups()
-                return url.callback(request, *args, **kwargs)
+                if issubclass(url.callback, RequestHandler):
+                    callable = url.callback(request)
+                else:
+                    callable = url.callback
+                content = callable(request, *args, **kwargs)
+                return content
+        raise Http404("No resource at '%s'." % request.path)
 
 class JSONSiteResource(SiteResource):
+    "Automatically handles JSON encoding and decoding and headers."
     def render(self, request):
-        request.setHeader("Content-type",
+        try:
+            # handle incoming data
+            if settings.DEBUG: print '\n', request.path
+            content = request.content.read()
+            if content:
+                request.parsed_content = json.decode(content)
+                if settings.DEBUG: print content
+            if settings.DEBUG: print db.session
+            # handle outgoing data
+            request.setHeader("Content-type",
                           'application/json; charset=utf-8')
-        body = SiteResource.render(self, request)
-        json_body = json.encode(body)
-        return json_body.encode('utf-8')  # twisted web expects regular str
+            body = SiteResource.render(self, request)
+        except Http404, h:
+            request.setResponseCode(http.NOT_FOUND)
+            body = str(h)
+        except Exception, e:  # *** this might be dangerous
+            request.setResponseCode(http.INTERNAL_SERVER_ERROR)
+            body = str(e)
+        # close out db session -- very important with threads
+        db.session.close()
+        if body not in (None, ''):
+            json_body = encode_response(body)
+            if settings.DEBUG:
+                print json_body
+            return json_body
+        return ''
 
-######### old stuff #############
+def encode_response(response):
+    # twisted web expects regular str, which encode('utf-8') gives
+    return json.encode(response).encode('utf-8')
     
-class ObjectResource(object):
-    """Resource for actions on a single object.
-    """
-    allowedMethods = ('GET', 'POST', 'DELETE')
+class ThreadedJSONSiteResource(JSONSiteResource):
+    "Run each request in its own thread."
+    def render(self, request):
+        d = threads.deferToThread(JSONSiteResource.render, self, request)
+        def callback(response):
+            request.write(response)
+            request.finish()
+        def errback(failure):
+            request.write(encode_response(str(failure)))
+            request.finish()
+        d.addCallbacks(callback, errback)
+        return server.NOT_DONE_YET
+        
 
-    # set in subclasses
-    DAO = None
+class RequestHandler(object):
+    "Generic HTTP resource callable from url framework."
+    allowedMethods = ('GET', 'POST', 'DELETE', 'PUT', 'HEAD')
     
-    def __call__(self, request, *keys):
-        print keys
-        if request.method == 'GET':
-            response = self.get(request, *keys)
-        elif request.method == 'POST':
-            raise NotImplemented
-        elif request.method == 'DELETE':
-            raise NotImplemented
-        else:
+    def __init__(self, request):
+        self.request = request
+        # *** replace with actual client
+        self.client = settings.TEST_CLIENT
+    
+    def __call__(self, request, *args, **kwargs):
+        "Creates resource object and calls appropriate method for this request."
+        if request.method not in self.allowedMethods:
             raise server.UnsupportedMethod(getattr(self, 'allowedMethods', ()))
-        return response
-    
-    def get(self, request, *keys):
-        "Returns data_dict for object."
-        keys = [unicode(key) for key in keys]
-        return self.DAO.get(*keys).data_dict()
-    
+        return getattr(self, request.method.lower())(*args, **kwargs)
 
-class ObjectListResource(resource.Resource):
-    "Resource for CRUD on a particular API data model."
-    allowedMethods = ('GET', 'POST')
+    def get(self, *args, **kwargs):
+        return NotImplemented
+    def post(self, *args, **kwargs):
+        return NotImplemented
+    def delete(self, *args, **kwargs):
+        return NotImplemented
+    def put(self, *args, **kwargs):
+        return NotImplemented
+    def head(self, *args, **kwargs):
+        # Twisted handles HEAD internally if we just do a GET.
+        return self.get(request, *args, **kwargs)
 
+
+class ObjectListHandler(RequestHandler):
+    "Handler for CRUD on a particular API data model."
+    allowedMethods = ('GET', 'POST', 'HEAD')
+    
     # Set in subclasses
     DAO = None
 
-    def __call__(self, request):
-        if request.method == 'GET':
-            response = self.get(request)
-        elif request.method == 'POST':
-            response = self.post(request)
-        else:
-            raise server.UnsupportedMethod(getattr(self, 'allowedMethods', ()))
-        return response
+    def processing_incoming(self, data_dict):
+        "Alter incoming data_dict."
+        pass
+    def process_outgoing(self, data_dict):
+        "Alter outgoing data_dict."
+        pass
     
-    def get(self, request):
+    def get(self):
         "Render list of objects."
         return list(self.filter())
 
-    def post(self, request):
+    def post(self):
         "Create new object."
-        content = request.content.read()
-        data_dict = de_unicodify_keys(json.decode(content))
+        data_dict = de_unicodify_keys(self.request.parsed_content)
+        self.process_incoming(data_dict)
         self.create(data_dict)
-        request.setResponseCode(http.CREATED)
 
     def create(self, data_dict):
         obj = self.DAO.create(**data_dict)
@@ -105,9 +175,98 @@ class ObjectListResource(resource.Resource):
 
     def filter(self):
         for obj in self.DAO.filter():
-            yield obj.data_dict()
-            
-        
+            data_dict = obj.data_dict()
+            self.process_outgoing(data_dict)
+            yield data_dict
+
+class ObjectHandler(RequestHandler):
+    """Handler for actions on a single object.
+    """
+    allowedMethods = ('GET', 'POST', 'DELETE', 'HEAD')
+
+    # set in subclasses
+    DAO = None
+
+    def processing_incoming(self, data_dict):
+        "Alter incoming data_dict."
+        pass
+    def process_outgoing(self, data_dict):
+        "Alter outgoing data_dict."
+        pass
+    
+    def get(self, *keys):
+        "Returns data_dict for object."
+        keys = [unicode(key) for key in keys]
+        data_dict = self.get_data_dict(*keys)
+        self.process_outgoing(data_dict)
+        return data_dict
+
+    def post(self, *keys):
+        "Update existing object."
+        keys = [unicode(key) for key in keys]
+        data_dict = de_unicodify_keys(self.request.parsed_content)
+        self.process_incoming(data_dict)
+        self.update(keys, data_dict)
+
+    def delete(self, *keys):
+        return NotImplemented
+
+    def get_data_dict(self, *keys):
+        return self.DAO.get(*keys).data_dict()        
+
+    def update(self, keys, data_dict):
+        obj = self.DAO.get(*keys)
+        obj.update(**data_dict)
+        db.commit()
+
 def de_unicodify_keys(d):
+    "Makes dict keys regular strings so it can be used for kwargs."
     return dict((str(key), value) for key, value in d.items())
+
+
+def encode_node_name(node_name, client_id):
+    return '%s/%s' % (client_id, node_name)
+def decode_node_name(encoded_node_name):
+    return encoded_node_name[encoded_node_name.find('/') + 1:]
+
+# for inclusion in classes below
+def process_incoming(self, data_dict):
+    "Encode node name to make it unique per client."
+    if 'node' in data_dict:
+        data_dict['node'] = encode_node_name(data_dict['node'], self.client)
+
+def process_outgoing(self, data_dict):
+    "Remove client from data_dict, decode node name."
+    if 'client' in data_dict:
+        del data_dict['client']
+    if 'node' in data_dict:
+        data_dict['node'] = decode_node_name(data_dict['node'])
+
+class RippleObjectListHandler(ObjectListHandler):
+    """For DAOs that have a client field, which is implicit
+    in the API, since the server knows who the client is already.
+    """
+    process_incoming = process_incoming
+    process_outgoing = process_outgoing
+
+    def create(self, data_dict):
+        "Add client key to data_dict."
+        if 'client' in self.DAO.db_fields:
+            data_dict['client'] = self.client
+        return super(RippleObjectListHandler, self).create(data_dict)
+
+    def filter(self):
+        if 'client' in self.DAO.db_fields:
+            filter_kwargs = {self.DAO.db_fields['client']: self.client}
+        else:
+            filter_kwargs = {}
+        for obj in self.DAO.filter(**filter_kwargs):
+            d = obj.data_dict()
+            self.process_outgoing(d)
+            yield d
+    
+class RippleObjectHandler(ObjectHandler):
+    # reuse methods
+    process_incoming = process_incoming
+    process_outgoing = process_outgoing
 

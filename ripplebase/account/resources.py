@@ -1,58 +1,123 @@
+##################
+# Copyright 2008, Ryan Fugger
+#
+# This file is part of Ripplebase.
+#
+# Ripplebase is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as 
+# published by the Free Software Foundation, either version 3 of the 
+# License, or (at your option) any later version.
+#
+# Ripplebase is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public 
+# License along with Ripplebase, in the file LICENSE.txt.  If not,
+# see <http://www.gnu.org/licenses/>.
+##################
+
 from twisted.web import resource
 
-from ripplebase.resource import ObjectListResource, ObjectResource
+from ripplebase.resource import *
 from ripplebase.account.dao import *
 
-class NodeResource(ObjectResource):
-    """Nodes don't need to report their client since
-    only that client could be making this request,
-    and it knows who it is already.
-    """
+
+def node_process_incoming(self, d):
+    super(self.__class__, self).process_incoming(d)
+    if 'name' in d:
+        d['name'] = encode_node_name(d['name'], self.client)
+
+def node_process_outgoing(self, d):
+    super(self.__class__, self).process_outgoing(d)
+    if 'name' in d:
+        d['name'] = decode_node_name(d['name'])
+
+class NodeListHandler(RippleObjectListHandler):
     DAO = NodeDAO
-    def get(self, request, key):
-        "Restrict to calling client; remove client field."
-        # *** replace with actual client
-        from ripplebase import settings
-        client = settings.TEST_CLIENT
-        d = ObjectResource.get(self, request, key, client)
-        del d['client']
-        return d
-node = NodeResource()
-    
-class NodeListResource(ObjectListResource):
+    process_incoming = node_process_incoming
+    process_outgoing = node_process_outgoing
+
+class NodeHandler(RippleObjectHandler):
     DAO = NodeDAO
-    resource_instance_class = NodeResource
+    process_incoming = node_process_incoming
+    process_outgoing = node_process_outgoing
+
+    def get_data_dict(self, key):
+        "Encode key = name."
+        key = encode_node_name(key, self.client)
+        return super(NodeHandler, self).get_data_dict(key)
+
+    def update(self, keys, data_dict):
+        keys = (encode_node_name(keys[0], self.client),)
+        return super(NodeHandler, self).update(keys, data_dict)
+
+def address_process_incoming(self, data_dict):
+    super(self.__class__, self).process_incoming(data_dict)
+    if 'nodes' in data_dict:
+        data_dict['nodes'] = [encode_node_name(node, self.client) for node
+                              in data_dict.get('nodes', ())]
+
+def address_process_outgoing(self, data_dict):
+    super(self.__class__, self).process_outgoing(data_dict)
+    if 'nodes' in data_dict:
+        data_dict['nodes'] = [decode_node_name(node) for node
+                              in data_dict.get('nodes', ())]
+
+class AddressListHandler(RippleObjectListHandler):
+    DAO = AddressDAO
+    process_incoming = address_process_incoming
+    process_outgoing = address_process_outgoing
+
+class AddressHandler(RippleObjectHandler):
+    DAO = AddressDAO
+    process_incoming = address_process_incoming
+    process_outgoing = address_process_outgoing
+
+
+account_request_fields = {
+    'address': 'source_address',
+    'partner': 'dest_address',
+    'note': 'note',
+}
+
+class AccountListHandler(RippleObjectListHandler):
+    DAO = AccountDAO
 
     def create(self, data_dict):
-        "Add client key to data_dict."
-        from ripplebase import settings
-        data_dict['client'] = settings.TEST_CLIENT
-        ObjectListResource.create(self, data_dict)
+        if 'relationship' not in data_dict:
+            # create relationship and account request
+            rel = RelationshipDAO.create()
+            data_dict['relationship'] = rel.id
+            req_dict = {'relationship': rel.id}
+            for key, req_key in account_request_fields.items():
+                req_dict[req_key] = data_dict[key]
+                del data_dict[key]
+            req = AccountRequestDAO.create(**req_dict)
+            data_dict['is_active'] = False
+        else:  # confirming account by creating dual account
+            # *** maybe ought to wait for exchanges before activating acct?
+            data_dict['is_active'] = True
+            AccountRequestDAO.delete(data_dict['relationship'])
+            init_acct = AccountDAO.filter(relationship=data_dict['relationship'])[0]
+            init_acct.is_active = True  # gets committed later
 
-    def filter(self):
-        # *** replace with actual client
-        from ripplebase import settings
-        client = settings.TEST_CLIENT
-        for obj in self.DAO.filter(client=client):
-            d = obj.data_dict()
-            del d['client']
-            yield d
-nodes = NodeListResource()
-
-class AddressResource(ObjectResource):
-    DAO = AddressDAO
-address = AddressResource()
-class AddressListResource(ObjectListResource):
-    DAO = AddressDAO
-addresses = AddressListResource()
-
-class AccountResource(ObjectResource):
+        super(RippleObjectListHandler, self).create(data_dict)
+    
+class AccountHandler(RippleObjectHandler):
     DAO = AccountDAO
-account = AccountResource()
-class AccountListResource(ObjectListResource):
-    DAO = AccountDAO
-accounts = AccountListResource()
 
-# class ExchangeResource(ObjectListResource):
+    def update(self, keys, data_dict):
+        if 'limits_effective_time' in data_dict:
+            raise ValueError("'limits_effective_time' is read-only.")
+        if 'relationship' in data_dict:
+            raise ValueError("'relationship' is read-only.")
+        super(AccountHandler, self).update(keys, data_dict)
+
+class AccountRequestListHandler(ObjectListHandler):
+    allowedMethods = ('GET', 'HEAD')
+    DAO = AccountRequestDAO
+    
+# class ExchangeHandler(ObjectListHandler):
 #     DAO = ExchangeDAO
-# acct_root.putChild('exchange', ExchangeResource())
