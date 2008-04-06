@@ -21,6 +21,7 @@
 ##################
 
 from sqlalchemy import orm
+from sqlalchemy.ext.associationproxy import association_proxy
 
 # db.mapper provides contextual session with autosave
 from ripplebase import db
@@ -42,6 +43,7 @@ db.mapper(Node, node_table, properties={
     'addresses': orm.relation(Address,
                               secondary=node_addresses_table,
                               backref='nodes')})  # m2m
+
 class Relationship(object):
     pass
 class Account(object):
@@ -59,27 +61,6 @@ db.mapper(AccountLimits, account_limits_table, properties={
     'account': orm.relation(Account, primaryjoin=
         account_limits_table.c.account_id==account_table.c.id)})
 
-class Exchange(object):
-    pass
-class ExchangeRate(object):
-    pass
-class ExchangeRateEntry(object):
-    pass
-
-db.mapper(Exchange, exchange_table, properties={
-    'source_account': orm.relation(Account, primaryjoin=
-        exchange_table.c.source_account_id==account_table.c.id),
-    'target_account': orm.relation(Account, primaryjoin=
-        exchange_table.c.target_account_id==account_table.c.id),
-    # *** eager load active exchange rate
-    })
-
-db.mapper(ExchangeRate, exchange_rate_table)
-db.mapper(ExchangeRateEntry, exchange_rate_entry_table, properties={
-    'exchange_rate': orm.relation(ExchangeRate, primaryjoin=
-        exchange_rate_entry_table.c.exchange_rate_id==\
-                                      exchange_rate_table.c.id)})
-
 class AccountRequest(object):
     pass
 db.mapper(AccountRequest, account_request_table, properties={
@@ -88,4 +69,30 @@ db.mapper(AccountRequest, account_request_table, properties={
         account_request_table.c.source_address_id==address_table.c.id),
     'dest_address': orm.relation(Address, primaryjoin=
         account_request_table.c.dest_address_id==address_table.c.id)})
+
+class Exchange(object):
+    pass
+class ExchangeRate(object):
+    pass
+class ExchangeExchangeRate(object):
+    pass
+class ExchangeRateValue(object):
+    pass
+
+db.mapper(Exchange, exchange_table, properties={
+    'source_account': orm.relation(Account, primaryjoin=
+        exchange_table.c.source_account_id==account_table.c.id),
+    'target_account': orm.relation(Account, primaryjoin=
+        exchange_table.c.target_account_id==account_table.c.id),
+    # *** eager load active exchange rate value?
+    })
+
+db.mapper(ExchangeRate, exchange_rate_table, properties={
+    'client': orm.relation(Client)})
+db.mapper(ExchangeExchangeRate, exchange_exchange_rate_table, properties={
+    'exchange': orm.relation(Exchange),
+    'rate': orm.relation(ExchangeRate)})
+db.mapper(ExchangeRateValue, exchange_rate_value_table, properties={
+    'rate': orm.relation(ExchangeRate)})
+
     

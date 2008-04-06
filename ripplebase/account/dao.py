@@ -22,8 +22,11 @@
 
 from datetime import datetime
 
+from sqlalchemy import sql
+
 from ripplebase.account.mappers import *
 from ripplebase import db
+from ripplebase.account.tables import *
 
 class ClientDAO(db.DAO):
     model = Client
@@ -99,25 +102,21 @@ class AccountDAO(db.DAO):
         'limits_expiry_time': 'expiry_time',
     }
 
-    def get_active_limits(self):
+    def _get_active_limits(self):
         if not hasattr(self, '_limits'):
-            db_limits = db.query(AccountLimits).filter_by(
-                account=self.data_obj, is_active=True).all()
-            if db_limits:
-                self._limits = db_limits[0]
-            else:
-                self._limits = None
+            self._limits = db.query(AccountLimits).filter_by(
+                account=self.data_obj, is_active=True).first()
         return self._limits
-    def set_active_limits(self, limits):
+    def _set_active_limits(self, limits):
         self._limits = limits
-    limits = property(get_active_limits, set_active_limits)
+    limits = property(_get_active_limits, _set_active_limits)
     
     def new_limits(self):
         """Call every time new limits are set.
         Sets old limits (if they exist) to inactive, creates
         new active limits record.
         Must then set upper, lower limits and effective,
-        expiry times before flushing sessions to db.
+        expiry times before flushing to db.
         """
         if self.limits:
             self.limits.is_active = False
@@ -125,15 +124,14 @@ class AccountDAO(db.DAO):
         else:
             old_limits = None
         self.limits = AccountLimits()
-        self.limits.is_active = True
         self.limits.account = self.data_obj
         if old_limits:
-            for attr in self.limits_map.values():
+            attrs_to_copy = self.limits_map.values()
+            attrs_to_copy.remove('effective_time')
+            for attr in attrs_to_copy:
                 setattr(self.limits, attr, getattr(old_limits, attr))
         # *** may be outstanding transactions using old limits
         # *** must guard against this when committing transaction!
-        self.limits.effective_time = datetime.now()
-        
     
     def __setattr__(self, attr, value):
         if attr in self.limits_map:
@@ -161,6 +159,14 @@ class AccountDAO(db.DAO):
         if limits_args:
             self.new_limits()
         super(AccountDAO, self).update(**kwargs)
+
+    @classmethod
+    def filter(cls, **kwargs):
+        limits_args = set(kwargs.keys()).intersection(cls.limits_map.keys())
+        if limits_args:
+            raise ValueError('Limits fields not implemented in filter: %s' %
+                             limits_args)
+        return super(AccountDAO, cls).filter(**kwargs)
         
 class AccountRequestDAO(db.DAO):
     model = AccountRequest
@@ -183,7 +189,7 @@ class ExchangeDAO(db.DAO):
     db_fields = {
         'source_account': 'source_account',
         'target_account': 'target_account',
-        'rate': 'rate',
+        'rate': None,  # mapped by ExchangeExchangeRate associaton/history table
     }
     # FK keys/dual keys won't work if another DAO wants to reference this DAO
     keys = ['source_account', 'target_account']
@@ -192,17 +198,115 @@ class ExchangeDAO(db.DAO):
         'target_account': AccountDAO,
     }
 
+    def _get_active_exchange_exchange_rate(self):
+        return db.query(ExchangeExchangeRate).filter_by(
+            exchange=self.data_obj, is_active=True).first()
+    
+    def __getattr__(self, attr):
+        if attr == 'rate':
+            statement = sql.select(
+                [exchange_rate_table.c.name],
+                from_obj= exchange_rate_table.join(
+                    exchange_exchange_rate_table,
+                    exchange_exchange_rate_table.c.exchange_id==self.data_obj.id,
+                    exchange_exchange_rate_table.c.is_active==True))
+            result = db.session.execute(statement)
+            return result.fetchone()[exchange_rate_table.c.name]
+        else:
+            return super(ExchangeDAO, self).__getattr__(attr)
 
+    def __setattr__(self, attr, value):
+        if attr == 'rate':
+            rate_dao = ExchangeRateDAO.get(value)
+            old_eer = self._get_active_exchange_exchange_rate()
+            if old_eer:
+                old_eer.is_active = False
+            new_eer = ExchangeExchangeRate()
+            new_eer.exchange = self.data_obj
+            new_eer.rate = rate_dao.data_obj
+        else:
+            super(ExchangeDAO, self).__setattr__(attr, value)
+
+    @classmethod
+    def filter(cls, **kwargs):
+        if 'rate' in kwargs:
+            raise ValueError('Rate field not implemented in filter.')
+        return super(ExchangeDAO, cls).filter(**kwargs)
+
+            
 class ExchangeRateDAO(db.DAO):
     model = ExchangeRate
     db_fields = {
         'name': 'name',
-        'rate': 'rate',  # maps to ExchangeRateEntry.rate
-        'effective_time': 'effective_time',  # maps to ExchangeRateEntry.effective_time 
-        'expiry_time': 'expiry_time',  # maps to ExchangeRateEntry.expiry_time
+        'client': 'client',
+        'rate': None,  # maps to ExchangeRateValue.rate
+        'effective_time': None,  # maps to ExchangeRateValue.effective_time 
+        'expiry_time': None,  # maps to ExchangeRateValue.expiry_time
     }
     keys = ['name']
+    fk_daos = {
+        'client': ClientDAO,
+    }
+    
+    value_map = {
+        'rate': 'value',
+        'effective_time': 'effective_time',  # set automatically
+        'expiry_time': 'expiry_time',
+    }
 
-    # *** handle nonstandard fields
+    def _get_active_value(self):
+        if not hasattr(self, '_value'):
+            self._value = db.query(ExchangeRateValue).filter_by(
+                rate=self.data_obj, is_active=True).first()
+        return self._value
+    def _set_active_value(self, value):
+        self._value = value
+    value = property(_get_active_value, _set_active_value)
+    
+    def new_value(self):
+        """Call every time new value is set.
+        Sets old value (if it exists) to inactive, creates
+        new active value record.
+        Must then set value and effective,
+        expiry times before flushing to db.
+        """
+        if self.value:
+            self.value.is_active = False
+        self.value = ExchangeRateValue()
+        self.value.rate = self.data_obj
+        # *** may be outstanding transactions using old value
+        # *** must guard against this when committing transaction!
+    
+    def __setattr__(self, attr, value):
+        if attr in self.value_map:
+            # make new value obj if one doesn't exist
+            if not self.value:
+                self.new_value()
+            setattr(self.value, self.value_map[attr], value)
+        else:
+            super(ExchangeRateDAO, self).__setattr__(attr, value)
 
+    def __getattr__(self, attr):
+        if attr in self.value_map:
+            if self.value:
+                return getattr(self.value, self.value_map[attr])
+            else:
+                return None
+        else:
+            return super(ExchangeRateDAO, self).__getattr__(attr)
+
+    def update(self, **kwargs):
+        "Create new value object if value is being changed."
+        value_args = set(kwargs.keys()).intersection(self.value_map.keys())
+        if value_args:
+            self.new_value()
+        super(ExchangeRateDAO, self).update(**kwargs)
+
+    @classmethod
+    def filter(cls, **kwargs):
+        value_args = set(kwargs.keys()).intersection(cls.value_map.keys())
+        if value_args:
+            raise ValueError('Value fields not implemented in filter: %s' %
+                             value_args)
+        return super(ExchangeRateDAO, cls).filter(**kwargs)
     

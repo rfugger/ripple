@@ -84,9 +84,11 @@ class JSONSiteResource(SiteResource):
                           'application/json; charset=utf-8')
             body = SiteResource.render(self, request)
         except Http404, h:
+            if settings.DEBUG: print h
             request.setResponseCode(http.NOT_FOUND)
             body = str(h)
-        except Exception, e:  # *** this might be dangerous
+        except Exception, e:  # *** this might catch too much
+            if settings.DEBUG: print e
             request.setResponseCode(http.INTERNAL_SERVER_ERROR)
             body = str(e)
         # close out db session -- very important with threads
