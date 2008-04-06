@@ -28,8 +28,9 @@ from ripplebase import db
 
 class DAOTest(unittest.TestCase):
     dao = None
-    data = []
-    filter_kwargs = []
+    data = []  # dicts
+    filter_kwargs = []  # dicts
+#     update_args = []  # keys, kwargs tuples
     
     def setUp(self):
         if self.dao is None:
@@ -43,7 +44,9 @@ class DAOTest(unittest.TestCase):
     def create(cls):
         "Install initial data."
         for fields in cls.data:
-            cls.dao.create(**fields)
+            keys = [fields[key] for key in cls.dao.keys]
+            if not cls.dao.exists(*keys):
+                cls.dao.create(**fields)
         db.commit()
         
     def test_create_and_get(self):
@@ -84,7 +87,17 @@ class DAOTest(unittest.TestCase):
                     self.fail("%s matches filter %s, but was not "
                               "in results." %
                               (data_dict, filter_kwargs))
-                
+
+    # *** to get update test to work, probably need a 'compare' function
+    # that can be defined per-DAO to account for auto-updated fields
+#     def test_update(self):
+#         self.create()
+#         for keys, kwargs in self.update_args:
+#             dao = self.dao.get(*keys)
+#             dao.update(**kwargs)
+#             ...
+                    
+
 class ClientDAOTest(DAOTest):
     dao = ClientDAO
     
@@ -246,12 +259,22 @@ class AccountDAOTest(DAOTest):
         {'name': u'my_account',
          'relationship': 0,
          'node': NodeDAOTest.data[0]['name'],
-         'is_active': False,
+         'is_active': True,
          'balance': D('0.00'),
          'upper_limit': D('100.00'),
          'lower_limit': D('-50.00'),
          'limits_effective_time': datetime(2008, 3, 10, 23, 21, 23, 945000),
-         'limits_expiry_time': datetime(2008, 3, 11, 23, 21, 23, 945000)}
+         'limits_expiry_time': datetime(2008, 4, 10, 23, 21, 23, 945000)},
+
+        {'name': u'other_account',
+         'relationship': 0,
+         'node': NodeDAOTest.data[1]['name'],
+         'is_active': True,
+         'balance': D('10.00'),
+         'upper_limit': D('10.00'),
+         'lower_limit': D('-40.00'),
+         'limits_effective_time': datetime(2007, 3, 10, 23, 21, 23, 945000),
+         'limits_expiry_time': datetime(2008, 4, 20, 23, 21, 23, 945000)},
     ]
 
     filter_kwargs = [
@@ -296,3 +319,51 @@ class AccountRequestDAOTest(DAOTest):
         RelationshipDAO.create(id=cls.data[0]['relationship'])
         super(AccountRequestDAOTest, cls).create()
 
+class ExchangeRateDAOTest(DAOTest):
+    dao = ExchangeRateDAO
+
+    data = [
+        {'name': u'USDCAD',
+         'client': ClientDAOTest.data[0]['name'],
+         'rate': D('1.0244'),
+         'effective_time': datetime(2008, 3, 10, 23, 21, 23, 945000),
+         'expiry_time': datetime(2008, 3, 11, 23, 21, 23, 945000),}
+    ]
+
+    filter_kwargs = [
+        {},
+        {'name': u'USDCAD'},
+        {'name': u'CADUSD'},
+    ]
+
+    @classmethod
+    def create(cls):
+        ClientDAOTest.create()
+        super(ExchangeRateDAOTest, cls).create()
+        
+class ExchangeDAOTest(DAOTest):
+    dao = ExchangeDAO
+
+    data = [
+        {'source_account': AccountDAOTest.data[0]['name'],
+         'target_account': AccountDAOTest.data[1]['name'],
+         'rate': ExchangeRateDAOTest.data[0]['name']}
+    ]
+    
+    filter_kwargs = [
+        {},
+        {'source_account': u'bleh',
+         'target_account': AccountDAOTest.data[1]['name']},
+        {'source_account': u'blah'},
+        {'source_account': AccountDAOTest.data[0]['name']},
+        {'target_account': AccountDAOTest.data[1]['name']},
+        {'source_account': AccountDAOTest.data[0]['name'],
+         'target_account': AccountDAOTest.data[1]['name']},
+    ]
+
+    @classmethod
+    def create(cls):
+        AccountDAOTest.create()
+        ExchangeRateDAOTest.create()
+        super(ExchangeDAOTest, cls).create()
+        

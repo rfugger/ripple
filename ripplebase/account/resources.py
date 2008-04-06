@@ -118,6 +118,10 @@ class AccountHandler(RippleObjectHandler):
 class AccountRequestListHandler(ObjectListHandler):
     allowedMethods = ('GET', 'HEAD')
     DAO = AccountRequestDAO
+
+class ExchangeRateListHandler(ObjectListHandler):
+    DAO = ExchangeRateDAO
     
-# class ExchangeHandler(ObjectListHandler):
-#     DAO = ExchangeDAO
+class ExchangeListHandler(ObjectListHandler):
+    DAO = ExchangeDAO
+    

@@ -99,13 +99,19 @@ class SimpleDAO(object):
                                  (self.__class__, attr))
 
     @classmethod
-    def _get_data_obj(cls, *keys):
-        return cls.filter(**dict(zip(cls.keys, keys))).query.one()
+    def _get_data_obj(cls, *keys, **kwargs):
+        q = cls.filter(**dict(zip(cls.keys, keys))).query
+        return kwargs.get('fail_if_not_exist') and q.one() or q.first()
     
     @classmethod
     def get(cls, *keys):
         data_obj = cls._get_data_obj(*keys)
         return cls(data_obj)
+
+    @classmethod
+    def exists(cls, *keys):
+        kwargs = dict(fail_if_not_exist=False)
+        return cls._get_data_obj(*keys, **kwargs) is not None
     
     @classmethod
     def delete(cls, *keys):
