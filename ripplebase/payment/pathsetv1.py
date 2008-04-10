@@ -34,7 +34,8 @@ RESULT_NODE_EXHAUSTED = 0
 RESULT_PATH_FOUND = 1
 RESULT_ALL_PATHS_FOUND = 2
 RESULT_GOING_UP_REGRESSION_CHAIN = 4 # the node wasn't the destination node, nor has it exhausted
-RESULT_INTERMEDIARY_HOP = 8          # nothing special about this hop 
+RESULT_INTERMEDIARY_HOP = 8          # nothing special about this hop
+RESULT_PATH_GENERATOR_EXHAUSTED = 16 # sick and tired; let's give up :) travelled through maximum specified nr of nodes
 
 # a bit of magic, to allow passing either object or its certain attribute to a function;
 # meta_to_attr returns decorator corresponding to provided lists:
@@ -63,6 +64,22 @@ def meta_deco_to_attr(arg_pos_list, attr_name_list):
     return deco
 
 hop_to_id = meta_deco_to_attr([0], ['id'])
+
+def edge_to_src_dest(fn):
+    """
+    Decorator function which, if argument is of _Edge type, converts it into
+    two CONTEXTED _Hop type arguments.
+    """
+    def fn_wrapper(cls, arg1, arg2, *args, **kwargs):
+        args_list = list(args)
+        if arg1.__class__ == Edge.underlying_type:
+            src_hop = Hop(arg1.src, context = arg2)
+            dest_hop = Hop(arg1.dest, context = arg2)
+            context = arg2
+            return fn(cls, src_hop, dest_hop, context, *args, **kwargs)
+        else:
+            return fn(cls, arg1, arg2, *args, **kwargs)
+    return fn_wrapper
 
 def cr_autonext(cr_gen):
     """
@@ -103,14 +120,13 @@ class Edge(object):
             
             self.credit_limit = credit_limit
 
-    #@edge_src_dest_toid
+    underlying_type = _Edge     # for @edge_to_src_dest decorator to access the underlying type
+            
+    @edge_to_src_dest
     def __new__(cls, src, dest, context = None):
         # src and dest are expected to be Hop's, not ids
-        # global mao
-        #print "Edge.__new__: src is %s, dest is %s" % (src, dest)
         if not cls.mao_synced:
             mao.synchronize_with_metric_db_table()
-            #print mao.metric_cache[14]
             cls.mao_synced = True
         if context is None:
             edge_dict = cls._edge_dict
@@ -122,7 +138,6 @@ class Edge(object):
             try:
                 credit_limit = mao.metric_cache[src.id][dest.id]
             except KeyError:
-                print "%s %s" % (src.id,dest.id)
                 raise EdgeException("No such edge")
             edge_dict.setdefault(src.id, {})
             res = edge_dict[src.id][dest.id] = cls._Edge(src, dest, credit_limit)
@@ -133,9 +148,6 @@ class Edge(object):
         print "_edge_dict: %s" % cls._edge_dict
         print "_contextual_edge_dicts: %s" % cls._contextual_edge_dicts
         
-
-
-
 class Hop(object):
     """
     Hop representation. For each given context, a singleton. The constructor can
@@ -152,22 +164,17 @@ class Hop(object):
         global mao
         edge_list = []
         dist_to_dest = -1       # not determined by default
-        # global mao
         
         def __init__(self, hop_id, context = None):
             self.id = hop_id
             self.context = context
             
         def query_and_register_outw_edges(self):
-            print self.id
             #if not self.edge_list: # *** was buggy, find out why
             if True:
-                #print "Hop.query_and_register_outw_edges: no self.edge_list found, creating"
                 neigh_id_list = mao.get_neighbor_list(self.id)
-                #print "mao returned neigh_id_list: %s" % neigh_id_list
                 neigh_list = map(Hop, neigh_id_list, (self.context,)*len(neigh_id_list))
                 self.edge_list[:] = map(Edge, (self,)*len(neigh_list), neigh_list)
-            #print "Hop.query_and_register_outw_edges: self.edge_list for %s is %s" % (self, self.edge_list)
 
     @hop_to_id
     def __new__(cls, hop_id, context = None):
@@ -198,25 +205,21 @@ class Hop(object):
         # combine.
         affected_id_list = map(getattr, affected_hop_list, ('id',)*len(affected_hop_list))
 
-        print "Hop.register_distance_to_dest: affected_id_list:"
-        print affected_id_list
+        if affected_id_list:
+            id_hop_tuple_list = zip(affected_id_list, affected_hop_list)
         
-        id_hop_tuple_list = zip(affected_id_list, affected_hop_list)
-        
-        id_hop_tuple_list.sort()
-        id_dist_tuple_list = mao.get_nodes_distances_to_dest(dest.id, affected_id_list)
-        id_dist_tuple_list.sort()
+            id_hop_tuple_list.sort()
+            id_dist_tuple_list = mao.get_nodes_distances_to_dest(dest.id, affected_id_list)
+            id_dist_tuple_list.sort()
 
-        ordered_hop_list = list(zip(*id_hop_tuple_list)[1])
-        ordered_dist_list = list(zip(*id_dist_tuple_list)[1])
+            ordered_hop_list = list(zip(*id_hop_tuple_list)[1])
+            ordered_dist_list = list(zip(*id_dist_tuple_list)[1])
 
-        print "Hop.register_distance_to_dest: ordered_dist_list:"
-        print ordered_dist_list
-        
-        map(setattr, ordered_hop_list, ('dist_to_dest',)*len(ordered_hop_list), ordered_dist_list)
-
-        print "ordered_hop_list[0].dist_to_dest = %s" % ordered_hop_list[0].dist_to_dest
-        
+            map(setattr, ordered_hop_list, ('dist_to_dest',)*len(ordered_hop_list), ordered_dist_list)
+        else:
+            ordered_hop_list = []
+            ordered_dist_list = []
+            
         return zip(ordered_hop_list, ordered_dist_list)
         
 class ExploredGraphSegment(object):
@@ -249,36 +252,11 @@ class ExploredGraphSegment(object):
         self.added_edges_dest_dict = {}
         self.edge_id_serial = 0
 
-        ## Moved to Hop classmethod
-#     def query_and_set_hops_distances(self, hop_list):
-#         #print "hop_list: %s" % hop_list
-#         if not hop_list: return
-#         hops_w_undet_dist_to_dest_list = filter(lambda x: x.dist_to_dest < 0, hop_list)
-#         hop_id_list = map(getattr, hops_w_undet_dist_to_dest_list, ('id',)*len(hops_w_undet_dist_to_dest_list))
-#         hop_id_and_hop_list = zip(hop_id_list, hops_w_undet_dist_to_dest_list)
-#         hop_id_and_hop_list.sort()
+    def adjust_metrics_according_to_path(self, path, affected_contexts_list):
+        edge_list = list(zip(*path.hop_edge_sequence)[0])
+        contexted_edge_lists = map(Edge, (edge_list,)*len(affected_contexts_list))
+        
 
-#         if not hop_id_and_hop_list: return
-        
-#         hop_id_dist_tuple_list = mao.get_nodes_distances_to_dest(self.dest.id, hop_id_list)
-#         hop_id_dist_tuple_list.sort()        
-
-#         #print "hop_id_and_hop_list = %s" % hop_id_and_hop_list
-        
-#         # get temp1 - distinct sorted (on hop_id) list of hop objects and temp2 - distinct sorted (on hop_id) metric list
-#         temp1 = list(zip(*hop_id_and_hop_list)[1])
-#         temp2 = list(zip(*hop_id_dist_tuple_list)[1])
-
-#         #print "query_and_set_hops_distances: we have:"
-        
-#         #print "hop_id_dist_tuple_list = %s" % hop_id_dist_tuple_list
-        
-#         #print "query_and_set_hops_distances: we get:"
-#         #print "temp1 = %s" % temp1
-#         #print "temp2 = %s" % temp2
-        
-#         # finalize - set the 'dist_to_dest' attribute
-#         map(setattr, temp1, ('dist_to_dest',)*len(temp1), temp2)
         
 class MetricAccessObject(object):
     # should not use Hop or Edge objects at this level of abstraction; id's instead.
@@ -294,31 +272,23 @@ class MetricAccessObject(object):
         """
         Loads edge metric data from database into self.metric_cache dictionary.
         """
-        #SQL_GET_DISTINCT_HOP_IDS = "SELECT DISTINCT src_node_id FROM metrix_table"
         SQL_GET_METRICS = "SELECT * FROM metrix_table"
-        #curs.execute(SQL_GET_DISTINCT_HOP_IDS)
-        #distinct_hops_tuple = curs.fetchall()
         self.metric_cache.clear()
         curs.execute(SQL_GET_METRICS)
         metrics_tuple_list = curs.fetchall()
         self.distinct_hops_set.clear()
         for metric_tuple in metrics_tuple_list:
             self.distinct_hops_set.add(metric_tuple[1])
-        #print self.distinct_hops_set
-        #print "Done!"
         for hop in self.distinct_hops_set:
             self.metric_cache[hop] = {}
         while metrics_tuple_list:
             metric_tuple = metrics_tuple_list.pop()
             self.metric_cache[metric_tuple[1]][metric_tuple[2]] = metric_tuple[3]
-        #print self.metric_cache
             
     def get_node_closest_to_dest(self, dest_id, node_list):
         if not node_list: return []
         dest_present = False      # flag, saying whether dest_node is among neighbors - False by default
         if dest_id in node_list:
-            #dest_present = True
-            #node_list.remove(dest_id)
             return dest_id
         NODE_LIST = "src_node_id = %s" % node_list[0]
         for n in node_list[1:]:
@@ -338,21 +308,15 @@ class MetricAccessObject(object):
         if dest_id in node_list:
             dest_present = True
             node_list.remove(dest_id)
-            #return dest_id
         NODE_LIST = "src_node_id = %s" % node_list[0]
         for n in node_list[1:]:
             NODE_LIST = NODE_LIST + " OR src_node_id = %s" % n
         SQL_GET_NODE_CLOSEST_TO_DEST = "SELECT src_node_id, distance FROM routing_table WHERE dest_node_id = %s AND (" % dest_id\
             + "%s)" % NODE_LIST
-        #print SQL_GET_NODE_CLOSEST_TO_DEST
         curs.execute(SQL_GET_NODE_CLOSEST_TO_DEST)
         result = curs.fetchall()
-        #print "get_node_closest_to_dest: result is %s" % result
         if dest_present: result.append((dest_id, 0))
         return result
-        
-
-    
     
 mao = MetricAccessObject()
 mao.synchronize_with_metric_db_table()
@@ -366,88 +330,42 @@ class Path(object):
     #edge_id_sequence = []      
     status = STATUS_PATH_NEUTRAL
     credit_limit = 0.0
-
+    
 class PathScope(object):
     """
     Describes sequence of hops and their outward traversable edges' characteristics
     """
-    step_data_sequence = []     # [[(edge1,edge2,..),(hop1,hop2,..),(dist1,dist2,..),(cred_lim1,cred_lim2,..)],..].
-                                # After add_step_dist_data level lists contain 'step_nr + dist' tuples 
-    #edge_id_sequence = []       
-    #credit_limit = 0.0
-    def prune_path_scope_leaf(self):
-        # #try: # *** Finish here
-#         length = len(self.step_data_sequence)
-#         last_step_data = self.step_data_sequence[length - 1]
-#         print "last_step_data: %s" % last_step_data
-#         #except IndexError:
-#         # all the pruning magic:
-#         zipped_lsd = zip(*last_step_data)
-#         print "\nzipped_lsd:\n%s" % zipped_lsd 
-#         pruned_zip = zipped_lsd.pop(0)
-#         print "pruned_zip: %s" % list(pruned_zip)
-#         self.step_data_sequence[length - 1][:] = map(list, list(zip(*pruned_zip)))
+    step_data_sequence = []     # [[(edge1, edge2, ..), (hop1, hop2, ..), (dist1, dist2, ..),\
+                                #  (cred_lim1, cred_lim2, ..), (<dist1+step_nr>, <dist2+step_nr>, ..)],..].
+    
+    def _prune_path_scope_leaf(self):
+        # made private - should only be executed within self.process_path_scope
         length = len(self.step_data_sequence)
         last_step_data = self.step_data_sequence[length - 1]
-        #print "\n\nlast_step_data:\n%s" % last_step_data 
-        # for tup, pos in zip(last_step_data[:], xrange(last_step_data)): # *** ridiculously ugly!!! do something 'bout it...
-#             lst = list(tup)
-#             lst.pop(0)
-#             last_step_data[pos]
         zip_lsd_list = list(zip(*last_step_data))
         zip_lsd_list.pop(0)
         self.step_data_sequence[length - 1] = list(zip(*zip_lsd_list))
 
-    def worsen_hop_distance(self, step, prev_best_distance):
+    def worsen_hop_distances(self, step, best_prev_step_dist_value):
         step_data = self.step_data_sequence[step]
-        zip_lsd_list = list(zip(*step_data))
-        hop_data = zip_lsd_list[0]
-        zip_lsd_list[0] = (hop_data[0], hop_data[1], prev_best_distance, hop_data[3], prev_best_distance + step)
-        self.step_data_sequence[step] = list(zip(*zip_lsd_list))
+        #print "step_data: %s" % step_data
+        dist_data = step_data[2]
+        step_dist_data = step_data[4]
+        dist_data[0] = best_prev_step_dist_value - step
+        step_dist_data[0] = best_prev_step_dist_value
         
-    def add_step_dist_data(self):
-        """
-        Adds step_nr + dist_to_dest to step_data_sequence entries
-        """
-        # print
-#         print "zip(xrange(len(self.step_data_sequence)), self.step_data_sequence):"
-#         #print zip(xrange(len(self.step_data_sequence)), self.step_data_sequence)
-#         print
-
-#         print "self.step_data_sequence:"
-#         print self.step_data_sequence
-#         print
-        
-        for step_nr, step_data in zip(xrange(len(self.step_data_sequence)), self.step_data_sequence):
-            # print
-#             print "step_data:"
-#             print step_data
-#             print
-#             print "zip(*step_data):"
-#             print zip(*step_data)
-#             print
-            characteristics_tuples_list = step_data #list(zip(*step_data)) #### *** DEBUGGING MESS - SOLVE
-            # print
-#             print "characteristics_tuples_list:"
-#             print characteristics_tuples_list
-#             print
-            dist_tuple = characteristics_tuples_list[2]
-            # print
-#             print "dist_tuple:"
-#             print
-#             print dist_tuple
-            step_dist_tuple = tuple(map(add, dist_tuple, (step_nr,)*len(dist_tuple)))
-            characteristics_tuples_list.append(step_dist_tuple)
-            #self.step_data_sequence = zip(*characteristics_tuples_list)
-            self.step_data_sequence[step_nr] = characteristics_tuples_list #### *** DEBUGGING MESS - SOLVE
-
     def process_path_scope(self):
-        pass
-
+        self._prune_path_scope_leaf()
+        curr_hop_nr = len(self.step_data_sequence) - 1 
+        best_prev_step_distance = self.find_best_step_dist_value(curr_hop_nr)
+        curr_hop_nr -= 1
+        while curr_hop_nr >= 0:
+            self.worsen_hop_distances(curr_hop_nr, best_prev_step_distance)
+            best_prev_step_distance = self.find_best_step_dist_value(curr_hop_nr)
+            curr_hop_nr -= 1
+            #print "now list(step_dist data) is: %s" % list(self.step_data_sequence[curr_hop_nr][4])
+            
     def find_best_step_dist_value(self, step):
-        # print "find_best_step_dist_value: step nr is: %s" % step
-#         print "step_data_sequence: "
-#         print self.step_data_sequence
         step_data = self.step_data_sequence[step]
         step_dist_data = step_data[4]
         best_sd_value = min(step_dist_data)
@@ -456,7 +374,19 @@ class PathScope(object):
     def get_steps_best_values(self):
         dist_array = map(self.find_best_step_dist_value, xrange(0, len(self.step_data_sequence)))
         return dist_array
-    
+
+    def switch_to_contexted_scope_data(self, nsteps, context):
+        """
+        Transforms all the Hop data within self.step_data_sequence[:nsteps]:
+          - for all hops: hop -> Hop(hop, context)
+          - for all edges: edge -> Edge(edge, context)
+          - sets hops' attribute 'dist_to_dest' according to self.step_data_sequence[step][2]
+        """
+        for edge_list, hop_list, dist_list, cr_lim_list, step_dist_list in self.step_data_sequence[:nsteps]:
+            edge_list[:] = map(Edge, edge_list, (context,)*len(edge_list))
+            hop_list[:] = map(Hop, hop_list, (context,)*len(hop_list))
+            map(setattr, hop_list, ('dist_to_dest',)*len(hop_list), dist_list)
+            
     def convert_to_path(self):
         """
         Returns Path object corresponding to 'nsteps' slice of PathScope(self) object.
@@ -465,56 +395,48 @@ class PathScope(object):
         #    steps NOT including the best_step
         # 2) pick hop and edge from best_step data, having the best (minimum) step_nr + dist_to_dest value
         # 3) that's it, return!
+
+        path = Path()
+        
         best_step, best_value = self.get_best_dist_step()
-        print "convert_to_path: best_step = %s" % best_step
-        if best_step > 0:
-            same_path_segment_data = map(getitem, self.step_data_sequence[:best_step], (0,)*(best_step))
+
+        self.switch_to_contexted_scope_data(best_step, id(path))
+
+        if best_step > 0:            
+            same_path_segment_scope_edge_data = map(getitem, self.step_data_sequence[:best_step], (0,)*(best_step))
+            same_path_segment_edge_data = map(getitem, same_path_segment_scope_edge_data, (0,)*len(same_path_segment_scope_edge_data))
+            same_path_segment_hop_data = map(getattr, same_path_segment_edge_data, ('src',)*(best_step))
+            same_path_segment_data = zip(same_path_segment_hop_data, same_path_segment_edge_data)
+        else:
+            same_path_segment_data = []
+               
         best_step_data = self.step_data_sequence[best_step]
         best_step_dist_list = list(best_step_data[4])
-        print "convert_to_path: best_step_dist_list = %s" % best_step_dist_list
-        print "best_value = %s" % best_value
         i = best_step_dist_list.index(best_value)
-        same_path_segment_data.append(best_step_data[i])
-        print "\n\nconvert_to_path: got this:"
-        print same_path_segment_data
+        same_path_segment_data.append((best_step_data[0][i].src, best_step_data[0][i]))
+        next_hop = best_step_data[0][i].dest
+    
+        path.hop_edge_sequence = same_path_segment_data
+
+        new_path_scope = PathScope()
+        new_path_scope.step_data_sequence[:] = self.step_data_sequence[:best_step + 1]
         
-            
-        # scope_slice = self.step_data_sequence[:best_step]
-        nsteps = len(same_path_segment_data)
-        hop_edge_slice = map(getslice, same_path_segment_data, (0,)*nsteps, (2,)*nsteps)
-        path = Path()
-#         print "\n\nhop_edge_slice:"
-#         print hop_edge_slice
-#         path.hop_edge_sequence = list(zip(*hop_edge_slice.reverse()))
-        return path
-
-
-    def export_to_path_segment_coroutine(self):
-        edge_list, context_tr_neighbor_list, dist_list, credit_limit, step_dist_list = (None,)*5
-        while True:
-            edge_list, context_tr_neighbor_list, dist_list, credit_limit, step_dist_list\
-                = yield edge_list, context_tr_neighbor_list, dist_list, credit_limit, step_dist_list
-            
+        return path, next_hop, new_path_scope
 
     def get_best_dist_step(self):
         steps_best_values = self.get_steps_best_values()
         best_value = steps_best_values[0]
-        print "get_best_dist_step: best_value = %s" % best_value
         nsteps = len(steps_best_values)
         for i, val in zip(xrange(len(steps_best_values)), steps_best_values):
-            print "get_best_dist_step: checking i = %s val = %s" % (i, val)
             if val > best_value: break
         i -= 1
         return i, best_value
     
-    ## No sorting should be performed when using current PathScope representation - it will distort the data
-    #def sort_by_dist_and_eval_best(self, level):
-    #    self.step_data_sequence[level].sort(lambda x, y: cmp(x[2], y[2]))
-        
-
-
-    
 class PathSetCr(object):
+    found_paths_list = []
+    exhausted_paths_list = []
+    path_scopes_list = []
+    
     def __init__(self, src_node, dest_node):
         """
         Initialize the object
@@ -525,44 +447,64 @@ class PathSetCr(object):
         self.search_agent = self.cr_search()
         self.hop_edge_registrar = self.cr_register_hops_edges()
         self.traversable_neighbor_explorer = self.cr_find_traversable_neighbor_hop_list()
-        # self.dist_sorting_agent = self.cr_arrange_by_distances()
         self.dist_crlim_sorting_agent = self.cr_arrange_by_cred_lim_within_same_dists()
+
+    @cr_autonext
+    def cr_find_next_path(self, max_path_length = 10, max_total_hops = 1000):
+        #path = None
+        total_hops = 0
+        path = Path()
+        curr_hop = self.src_node
+        path_scope = PathScope()
+        while True:
+            yield path
+            res = (None,)*5
+            while res[2] != RESULT_PATH_FOUND:
+                res = self.search_agent.send((path, path_scope, curr_hop, max_path_length))
+                total_hops += 1
+                if total_hops >= 1000: yield RESULT_PATH_GENERATOR_EXHAUSTED
+                curr_hop = res[0][1]
+            self.found_paths_list.append(path)
+            self.path_scopes_list.append(path_scope)
+            path_scope.process_path_scope()
+            path, curr_hop, path_scope = path_scope.convert_to_path()
+            res = (None,)*5
         
     @cr_autonext
     def cr_search(self):
-        next_vector, credit_limit, result_flag = (None, None, None)
+        next_vector, credit_limit, result_flag = (None, 1000000000000000000.0, None)
         while True:
-            print "cr_search: next iteration"
-            path, curr_hop, max_path_length = yield next_vector, credit_limit, result_flag
-        #path, curr_hop, max_path_length = yield # upon resuming this coroutine, listed variables must be provided through "send"
-            print "cr_search: curr_hop: %s" % curr_hop
-            print "cr_search: curr_hop.id: %s" % curr_hop.id
-            print "cr_search: self.dest_node.id: %s" % self.dest_node.id
+            path, path_scope, curr_hop, max_path_length = yield next_vector, credit_limit, result_flag
             if curr_hop.id == self.dest_node.id:
                 path.hop_edge_sequence.append((curr_hop, None))
                 path.credit_limit = credit_limit
-                path, curr_hop, max_path_length = (curr_hop, cred_limit, RESULT_PATH_FOUND)
+                path, curr_hop, max_path_length = (curr_hop, credit_limit, RESULT_PATH_FOUND)
                 result_flag = RESULT_PATH_FOUND
                 continue
 
             contexted_curr_hop = Hop(curr_hop, id(path)) # create context-bound (current path-bound) clone of the hop
             
             step_nr = len(path.hop_edge_sequence)
+
+            
+            contexted_curr_hop.query_and_register_outw_edges()
             
             traversable_neighbor_list = self.traversable_neighbor_explorer.send((path, curr_hop))
-            #print "================================"
+            
             context_tr_neighbor_list = map(Hop, traversable_neighbor_list)
-
+            
+            
             edge_list, context_tr_neighbor_list = self.hop_edge_registrar.send((path, contexted_curr_hop, context_tr_neighbor_list))
 
             Hop.register_distance_to_dest(self.dest_node, context_tr_neighbor_list)
             
+            
             dist_list = map(getattr, context_tr_neighbor_list, ('dist_to_dest',)*len(context_tr_neighbor_list))
             cred_lim_list = map(getattr, edge_list, ('credit_limit',)*len(edge_list))
-            step_dist_list = map(add, dist_list, (step_nr,)*len(dist_list))
-
+            # *** modify the cred_lim_list according to current credit_limit value
+            cred_lim_list[:] = map(min, cred_lim_list, (credit_limit,)*len(cred_lim_list))
             
-            #aggregate_tuple_list = zip(edge_list, context_tr_neighbor_list, dist_list, credit_limit, step_dist_list)
+            step_dist_list = map(add, dist_list, (step_nr,)*len(dist_list))
             
             # DONE. implement: sort these lists 1) according to distances; 2) according to cred_limit (within same distances).
             # *** send these lists to PathScope-registering coroutine
@@ -571,17 +513,22 @@ class PathSetCr(object):
             self.dist_crlim_sorting_agent.send((edge_list, context_tr_neighbor_list, dist_list, cred_lim_list, step_dist_list))
 
             next_vector = zip(edge_list, context_tr_neighbor_list, dist_list, cred_lim_list, step_dist_list)[0]
-            print "\n\next_vector: \n%s\n" % list(next_vector)
-            print "next hop id: %s" % next_vector[1].id
-            #curr_hop = next_vector()
+            credit_limit = path.credit_limit = next_vector[3]
+            print "cr_search: credit_limit = %s" % credit_limit
 
+            # *** I'd prefer sending relevant info to path object - let it deal with it... but ok for now :)
+            appendable_to_path = (contexted_curr_hop, next_vector[0])
+            path.hop_edge_sequence.append(appendable_to_path)
+
+            # and now record this information in path_scope
+            path_scope.step_data_sequence.append([edge_list, context_tr_neighbor_list, dist_list, cred_lim_list, step_dist_list])
+            result_flag = RESULT_INTERMEDIARY_HOP
+            
     @cr_autonext
     def cr_register_hops_edges(self):
         edge_list, traversable_neighbor_list = (None, None)
         while True:
             path, hop, traversable_neighbor_list = yield edge_list, traversable_neighbor_list
-            print "traversable_neighbor_list ids:"
-            print map(getattr, traversable_neighbor_list, ('id',)*len(traversable_neighbor_list))
             edge_list = map(Edge, (hop,)*len(traversable_neighbor_list), traversable_neighbor_list, \
                                                        (id(path),)*len(traversable_neighbor_list))
             hop.edge_list = edge_list
@@ -601,19 +548,19 @@ class PathSetCr(object):
             
     @cr_autonext
     def cr_find_traversable_neighbor_hop_list(self):
-        path, curr_hop = yield []
+        traversable_hop_list = None
         while True:
+            path, curr_hop = yield traversable_hop_list
             curr_hop_all_neighbors_list = map(getattr, curr_hop.edge_list, ('dest',)*len(curr_hop.edge_list))
-            #print "cr_find_traversable_neighbor_hop_list: curr_hop_all_neighbors_list:"
-            #print curr_hop_all_neighbors_list
             curr_hop_all_neighbors_set = set(curr_hop_all_neighbors_list)
-
+            
             if path.hop_edge_sequence:
-                all_traversed_hop_set = set(zip(path.hop_edge_sequence)[0])
+                all_traversed_hop_set = set(zip(*path.hop_edge_sequence)[0])
             else:
                 all_traversed_hop_set = set([])
+
             traversable_hop_list = list(curr_hop_all_neighbors_set - all_traversed_hop_set)
-            path, curr_hop = yield traversable_hop_list
+            
             
     @cr_autonext
     def cr_arrange_by_distances(self):
@@ -911,3 +858,98 @@ def sort_objects_by_attr(attr, object_list, in_place = True):
 #                 yield RESULT_PATH_FOUND
 #             else:
 #                 yield RESULT_INTERMEDIARY_HOP
+
+
+#     def add_step_dist_data(self):
+#         """
+#         Adds step_nr + dist_to_dest to step_data_sequence entries
+#         """
+#         # print
+# #         print "zip(xrange(len(self.step_data_sequence)), self.step_data_sequence):"
+# #         #print zip(xrange(len(self.step_data_sequence)), self.step_data_sequence)
+# #         print
+
+# #         print "self.step_data_sequence:"
+# #         print self.step_data_sequence
+# #         print
+        
+#         for step_nr, step_data in zip(xrange(len(self.step_data_sequence)), self.step_data_sequence):
+#             # print
+# #             print "step_data:"
+# #             print step_data
+# #             print
+# #             print "zip(*step_data):"
+# #             print zip(*step_data)
+# #             print
+#             characteristics_tuples_list = step_data #list(zip(*step_data)) #### *** DEBUGGING MESS - SOLVE
+#             # print
+# #             print "characteristics_tuples_list:"
+# #             print characteristics_tuples_list
+# #             print
+#             dist_tuple = characteristics_tuples_list[2]
+#             # print
+# #             print "dist_tuple:"
+# #             print
+# #             print dist_tuple
+#             step_dist_tuple = tuple(map(add, dist_tuple, (step_nr,)*len(dist_tuple)))
+#             characteristics_tuples_list.append(step_dist_tuple)
+#             #self.step_data_sequence = zip(*characteristics_tuples_list)
+#             self.step_data_sequence[step_nr] = characteristics_tuples_list #### *** DEBUGGING MESS - SOLVE
+
+
+        ## Moved to Hop classmethod
+#     def query_and_set_hops_distances(self, hop_list):
+#         #print "hop_list: %s" % hop_list
+#         if not hop_list: return
+#         hops_w_undet_dist_to_dest_list = filter(lambda x: x.dist_to_dest < 0, hop_list)
+#         hop_id_list = map(getattr, hops_w_undet_dist_to_dest_list, ('id',)*len(hops_w_undet_dist_to_dest_list))
+#         hop_id_and_hop_list = zip(hop_id_list, hops_w_undet_dist_to_dest_list)
+#         hop_id_and_hop_list.sort()
+
+#         if not hop_id_and_hop_list: return
+        
+#         hop_id_dist_tuple_list = mao.get_nodes_distances_to_dest(self.dest.id, hop_id_list)
+#         hop_id_dist_tuple_list.sort()        
+
+#         #print "hop_id_and_hop_list = %s" % hop_id_and_hop_list
+        
+#         # get temp1 - distinct sorted (on hop_id) list of hop objects and temp2 - distinct sorted (on hop_id) metric list
+#         temp1 = list(zip(*hop_id_and_hop_list)[1])
+#         temp2 = list(zip(*hop_id_dist_tuple_list)[1])
+
+#         #print "query_and_set_hops_distances: we have:"
+        
+#         #print "hop_id_dist_tuple_list = %s" % hop_id_dist_tuple_list
+        
+#         #print "query_and_set_hops_distances: we get:"
+#         #print "temp1 = %s" % temp1
+#         #print "temp2 = %s" % temp2
+        
+#         # finalize - set the 'dist_to_dest' attribute
+#         map(setattr, temp1, ('dist_to_dest',)*len(temp1), temp2)
+
+#     def worsen_hop_distance(self, step, prev_best_step_distance):
+#         print "whd: prev_best_step_distance = %s" % prev_best_step_distance
+#         step_data = self.step_data_sequence[step]
+#         step_data_list = list(step_data)
+        
+#         #print "\n\nwhd: type(step_data) is %s, list(step_data) is:\n%s" % (type(step_data), list(step_data))
+        
+#         zip_lsd_list = list(zip(*step_data))
+#         hop_data = zip_lsd_list[0]
+#         zip_lsd_list[0] = (hop_data[0], hop_data[1], prev_best_step_distance - step, hop_data[3], prev_best_step_distance)
+
+#         tuple_list = list(zip(*zip_lsd_list))
+#         new_lists = map(list, tuple_list)
+
+#         for lst, nlst in zip(step_data, new_lists):
+#             print "lst is: %s" % lst
+#             print "nlst is: %s" % nlst
+#             lst[:] = nlst[:]
+            
+
+#         print "whd: new lists[4] is:\n%s\n" % new_lists[4]
+
+#         #map(setitem, self.step_data[:])
+        
+#         #self.step_data_sequence[step][:] = new_lists[:]
