@@ -33,4 +33,7 @@ urls = (
     (r'^/accounts/?$', acct.AccountListHandler),
     (r'^/accounts/([^/]+)/?$', acct.AccountHandler),
     (r'^/accountrequests/?$', acct.AccountRequestListHandler),
+
+    (r'^/rates/?$', acct.ExchangeRateListHandler),
+    (r'^/rates/([^/]+)/?$', acct.ExchangeRateHandler),
 )

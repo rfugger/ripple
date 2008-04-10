@@ -170,7 +170,7 @@ exchange_rate_value_table = sql.Table(
     sql.Column('is_active', sql.Boolean, nullable=False, default=True),
     sql.Column('effective_time', sql.DateTime, nullable=False,
                default=sql.func.now()),
-    sql.Column('expiry_time', sql.DateTime, nullable=False),    
+    sql.Column('expiry_time', sql.DateTime, nullable=True),    
     sql.Column('value', sql.Numeric(PRECISION, SCALE),
                nullable=False),
 )

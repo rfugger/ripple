@@ -115,13 +115,29 @@ class AccountHandler(RippleObjectHandler):
             raise ValueError("'relationship' is read-only.")
         super(AccountHandler, self).update(keys, data_dict)
 
-class AccountRequestListHandler(ObjectListHandler):
+class AccountRequestListHandler(RippleObjectListHandler):
     allowedMethods = ('GET', 'HEAD')
     DAO = AccountRequestDAO
 
-class ExchangeRateListHandler(ObjectListHandler):
+class ExchangeRateListHandler(RippleObjectListHandler):
     DAO = ExchangeRateDAO
+    process_incoming = node_process_incoming
+    process_outgoing = node_process_outgoing    
     
-class ExchangeListHandler(ObjectListHandler):
+class ExchangeRateHandler(RippleObjectHandler):
+    DAO = ExchangeRateDAO
+    process_incoming = node_process_incoming
+    process_outgoing = node_process_outgoing
+
+    def get_data_dict(self, key):
+        "Encode key = name."
+        key = encode_node_name(key, self.client)
+        return super(ExchangeRateHandler, self).get_data_dict(key)
+
+    def update(self, keys, data_dict):
+        keys = (encode_node_name(keys[0], self.client),)
+        return super(ExchangeRateHandler, self).update(keys, data_dict)
+
+class ExchangeListHandler(RippleObjectListHandler):
     DAO = ExchangeDAO
     

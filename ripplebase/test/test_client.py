@@ -31,7 +31,7 @@ from twisted.web import http
 
 import ripplebase
 from ripplebase import db, settings, json
-from ripplebase.account.mappers import AccountLimits
+from ripplebase.account.mappers import *
 
 ripplebase_path = ripplebase.__path__[0]
 
@@ -95,17 +95,22 @@ class ClientTest(unittest.TestCase):
         urlopen('/abcdef', code=http.NOT_FOUND)
         urlopen('/nodes', {u'abcdef': u'mung'}, code=http.INTERNAL_SERVER_ERROR)
                 
-    def check_data(self, url, expected_data):
+    def check_data(self, url, expected_data, process_recv_data=None):
         recv_data = urlopen(url)
+        if process_recv_data:
+            process_recv_data(recv_data)
         self.assertEquals(recv_data, expected_data)
 
-    def update_and_check(self, update_url, new_data, check_url=None):
+    def update_and_check(self, update_url, new_data, check_url=None,
+                         process_recv_data=None):
         if check_url is None:
             check_url = update_url
         orig_data = urlopen(update_url)
+        if process_recv_data:
+            process_recv_data(orig_data)
         urlopen(update_url, new_data)
         orig_data.update(new_data)
-        self.check_data(check_url, orig_data)
+        self.check_data(check_url, orig_data, process_recv_data)
         
     def test_node(self):
         data_dict = {u'name': u'my_node', u'addresses': []}
@@ -149,19 +154,12 @@ class ClientTest(unittest.TestCase):
          self.update_and_check('/addresses/new_address',
                                {u'nodes': [u'nother_node']})
 
-    def check_account_data(self, url, expected_data, min_effective_time=None):
-        recv_data = urlopen(url)
-        self.process_acct_recv_data(recv_data)
-        self.assertEquals(recv_data, expected_data)
+    def check_account_data(self, url, expected_data):
+        self.check_data(url, expected_data, self.process_acct_recv_data)
 
     def update_and_check_account(self, update_url, new_data, check_url=None):
-        if check_url is None:
-            check_url = update_url
-        orig_data = urlopen(update_url)
-        self.process_acct_recv_data(orig_data)
-        urlopen(update_url, new_data)
-        orig_data.update(new_data)
-        self.check_account_data(check_url, orig_data)
+        self.update_and_check(update_url, new_data, check_url,
+                              self.process_acct_recv_data)
          
     def process_acct_recv_data(self, recv_data):
         effective_time = recv_data['limits_effective_time']
@@ -258,6 +256,57 @@ class ClientTest(unittest.TestCase):
         self.failUnless(new_limits.is_active)
 
         # *** do some more various updating here
+
+        
+    def check_rate_data(self, url, expected_data):
+        self.check_data(url, expected_data, self.process_eff_time_recv_data)
+
+    def update_and_check_rate(self, update_url, new_data, check_url=None):
+        self.update_and_check(update_url, new_data, check_url,
+                              self.process_eff_time_recv_data)
+         
+    def process_eff_time_recv_data(self, recv_data_list):
+        if not isinstance(recv_data_list, list):
+            recv_data_list = [recv_data_list]
+        for recv_data in recv_data_list:
+            effective_time = recv_data['effective_time']
+            try:
+                eff_datetime = str_to_datetime(effective_time)
+            except ValueError, ve:
+                self.fail("Invalid 'effective_time' returned: '%s'."
+                          "Error was: %s." % (effective_time, ve))
+            del recv_data['effective_time']
+            recv_data['rate'] = D(recv_data['rate'])
+
+    def test_exchangerate(self):
+        rate1 = {'name': u'USDCAD',
+                 'rate': D('1.0232'),
+                 'expiry_time': None}
+        rate2 = {'name': u'gAuhrs',
+                 'rate': D('0.003943'),
+                 'expiry_time': None}
+
+        urlopen('/rates/', rate1)
+        self.check_rate_data('/rates/', [rate1])
+        self.check_rate_data('/rates/%s' % rate1['name'], rate1)
+
+        urlopen('/rates/', rate2)
+        self.check_rate_data('/rates', [rate1, rate2])
+        self.check_rate_data('/rates/%s/' % rate2['name'], rate2)
+
+        time.sleep(1)  # make sure different time appears on new rate
+        self.update_and_check_rate('/rates/%s' % rate1['name'],
+                                   {'rate': D('0.8452342')})
+        # make sure old values got stored
+        values = ExchangeRateValue.query().order_by('effective_time')
+        old_value = values[0]
+        new_value = values[2]
+        self.assertEquals(old_value.value, rate1['rate'])
+        self.assertEquals(new_value.value, D('0.8452342'))
+        self.failUnless(old_value.effective_time < new_value.effective_time)
+        self.failUnless(old_value.is_active == False)
+        self.failUnless(new_value.is_active)
+        
         
 def str_to_datetime(s):
     return datetime.strptime(s, '%s %s' % (json.RippleJSONEncoder.DATE_FORMAT,
