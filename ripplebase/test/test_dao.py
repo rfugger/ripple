@@ -203,18 +203,23 @@ class AddressDAOTest(DAOTest):
     data = [
         {'address': u'address0',
          'client': client_data[0]['name'],
+         'owner': u'blabby blab',
          'accounts': []},  # empty nodes field
         {'address': u'address1',
          'client': client_data[0]['name'],
+         'owner': u'cratchy cratch',
          'accounts': [AccountDAOTest.data[0]['name']]},
         {'address': u'address2',
          'client': client_data[1]['name'],
+         'owner': u'abcdef',
          'accounts': [AccountDAOTest.data[1]['name']]},
         {'address': u'address3',
          'client': client_data[0]['name'],
+         'owner': u'blabby blab',
          'accounts': [AccountDAOTest.data[2]['name']]},
         {'address': u'person',
          'client': client_data[0]['name'],
+         'owner': u'r2d2',
          'accounts': [AccountDAOTest.data[0]['name'],
                       AccountDAOTest.data[2]['name']]}
     ]
@@ -237,7 +242,8 @@ class AddressDAOTest(DAOTest):
     def test_no_accounts(self):
         "Make sure it works with accounts left out."
         data = {'address': u'no_accounts',
-                'client': client_data[0]['name']}
+                'client': client_data[0]['name'],
+                'owner': u'xomdofj fjkls'}
         self.load_client(data)
         AddressDAO.create(**data)
         db.commit()

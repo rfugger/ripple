@@ -36,6 +36,7 @@ address_table = sql.Table(
     'address', db.meta,
     sql.Column('id', sql.Integer, primary_key=True),
     sql.Column('address', sql.Unicode(256), nullable=False, unique=True),
+    sql.Column('owner', sql.Unicode(256), nullable=False),
     sql.Column('client_id', sql.Integer,
                sql.ForeignKey('client.id'),
                nullable=False),

@@ -115,6 +115,7 @@ class ClientTest(unittest.TestCase):
         
     def test_address(self):
          address_dict = {'address': u'my_address',
+                         'owner': u'itchy scratchy',
                          'accounts': []}
          urlopen('/addresses/', address_dict)
 
@@ -128,6 +129,12 @@ class ClientTest(unittest.TestCase):
          self.update_and_check('/addresses/my_address',
                                {u'address': u'new_address'},
                                '/addresses/new_address')
+         self.update_and_check('/addresses/new_address',
+                               {'owner': u'bart homer'})
+         self.update_and_check('/addresses/new_address',
+                               {'address': u'old_address',
+                                'owner': u'marge lisa'},
+                               '/addresses/old_address/')
 
          # *** accounts m2m field is tested below in test_account
          
@@ -150,8 +157,10 @@ class ClientTest(unittest.TestCase):
             recv_data[field] = D(recv_data[field])
 
     def test_account(self):
-        addresses = [{u'address': u'my_address'},
-                     {u'address': u'other_address'}]
+        addresses = [{u'address': u'my_address',
+                      'owner': 'guy'},
+                     {u'address': u'other_address',
+                      'owner': 'girl'}]
         init_acct = {u'name': u'my_account',
                      u'owner': u'blubby blub',
                      u'balance': D(u'0.00'),
@@ -194,8 +203,8 @@ class ClientTest(unittest.TestCase):
 
         # check address has account now
         address_data = urlopen('/addresses/my_address')
-        expected_address_data = {'address': u'my_address',
-                                 'accounts': [u'my_account']}
+        expected_address_data = addresses[0]
+        expected_address_data['accounts'] = [u'my_account']
         self.assertEquals(address_data, expected_address_data)
         
         # create other account
@@ -216,8 +225,8 @@ class ClientTest(unittest.TestCase):
 
         # check partner address has account now
         address_data = urlopen('/addresses/other_address')
-        expected_address_data = {'address': u'other_address',
-                                 'accounts': [u'other_account']}
+        expected_address_data = addresses[1]
+        expected_address_data['accounts'] = [u'other_account']
         self.assertEquals(address_data, expected_address_data)
 
         # update account in a few ways

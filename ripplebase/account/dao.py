@@ -133,6 +133,7 @@ class AddressDAO(db.RippleDAO):
     model = Address
     db_fields = {
         'address': 'address',
+        'owner': 'owner',
         'accounts': None,  # maps to m2m association table
     }
     keys = ['address']
