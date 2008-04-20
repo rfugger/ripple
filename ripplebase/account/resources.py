@@ -89,3 +89,5 @@ class ExchangeRateHandler(RippleObjectHandler):
 class ExchangeListHandler(RippleObjectListHandler):
     DAO = ExchangeDAO
     
+class ExchangeHandler(RippleObjectHandler):
+    DAO = ExchangeDAO

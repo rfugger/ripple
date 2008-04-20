@@ -302,6 +302,57 @@ class ClientTest(unittest.TestCase):
         self.failUnless(old_value.effective_time < new_value.effective_time)
         self.failUnless(old_value.is_active == False)
         self.failUnless(new_value.is_active)
+
+        
+    def test_exchange(self):
+        addresses = [{u'address': u'my_address',
+                      'owner': 'guy'},
+                     {u'address': u'other_address',
+                      'owner': 'girl'}]
+        accounts = [{u'name': u'my_account',
+                     u'owner': u'girl',
+                     u'balance': D(u'0.00'),
+                     u'upper_limit': D(u'100.00'),
+                     u'lower_limit': D(u'-100.00'),
+                     u'limits_expiry_time': None,
+                     # the rest are for account request
+                     u'address': u'my_address',
+                     u'partner': u'other_address',
+                     u'note': u'Hey.'},
+                    {u'name': u'other_account',
+                     u'owner': u'girl',
+                     u'balance': D(u'0.00'),
+                     u'upper_limit': D(u'100.00'),
+                     u'lower_limit': D(u'-100.00'),
+                     u'limits_expiry_time': None,
+                     # the rest are for account request
+                     u'address': u'my_address',
+                     u'partner': u'other_address',
+                     u'note': u'Heya.'}]
+        rate1 = {'name': u'USDCAD',
+                 'rate': D('1.0232'),
+                 'expiry_time': None}
+        rate2 = {'name': u'gAuhrs',
+                 'rate': D('0.003943'),
+                 'expiry_time': None}
+
+        exchange = {'source_account': u'my_account',
+                    'target_account': u'other_account',
+                    'rate': u'USDCAD'}
+
+        for address in addresses:
+            urlopen('/addresses/', address)
+        for account in accounts:
+            urlopen('/accounts', account)
+        for rate in (rate1, rate2):
+            urlopen('/rates', rate)
+
+        urlopen('/exchanges', exchange)
+        self.check_data('/exchanges/', [exchange])
+        self.check_data('/exchanges/%s/%s' % (exchange['source_account'],
+                                              exchange['target_account']),
+                        exchange)
+                   
         
         
 def str_to_datetime(s):

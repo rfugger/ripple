@@ -34,4 +34,5 @@ urls = (
     (r'^/rates/([^/]+)/?$', acct.ExchangeRateHandler),
 
     (r'^/exchanges/?$', acct.ExchangeListHandler),
+    (r'^/exchanges/([^/]+)/([^/]+)/?$', acct.ExchangeHandler),
 )
