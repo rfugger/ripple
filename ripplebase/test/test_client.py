@@ -60,6 +60,7 @@ def urlopen(path, data=None, code=http.OK):
                 # *** how to capture response on code other than 200?
                 #     maybe content is stored in HTTPError object?
                 break
+            print he.read()  # display body
             raise
         except urllib.URLError, ue:
             if ue.reason.args[0] in (10061, 111):  # connection refused
@@ -93,7 +94,7 @@ class ClientTest(unittest.TestCase):
 
     def test_bad_requests(self):
         urlopen('/abcdef', code=http.NOT_FOUND)
-        urlopen('/nodes', {u'abcdef': u'mung'}, code=http.INTERNAL_SERVER_ERROR)
+        urlopen('/addresses', {u'abcdef': u'mung'}, code=http.INTERNAL_SERVER_ERROR)
                 
     def check_data(self, url, expected_data, process_recv_data=None):
         recv_data = urlopen(url)
@@ -112,32 +113,9 @@ class ClientTest(unittest.TestCase):
         orig_data.update(new_data)
         self.check_data(check_url, orig_data, process_recv_data)
         
-    def test_node(self):
-        data_dict = {u'name': u'my_node', u'addresses': []}
-        urlopen('/nodes/', data_dict)
-            
-        # check node is in list
-        self.check_data('/nodes', [data_dict])
-
-        # check node is at own url
-        self.check_data('/nodes/my_node/', data_dict)
-
-        # update node a few times and check
-        self.update_and_check('/nodes/my_node',
-                              {u'name': u'new_name'},
-                              '/nodes/new_name')
-        urlopen('/addresses/', {u'address': u'my_address'})
-        self.update_and_check('/nodes/new_name',
-                              {u'addresses': [u'my_address']})
-        self.update_and_check('/nodes/new_name',
-                              {u'name': u'old_name'},
-                              '/nodes/old_name')        
-
     def test_address(self):
-         node_dict = {u'name': u'my_node'}
-         address_dict = {u'address': u'my_address',
-                         u'nodes': [u'my_node']}
-         urlopen('/nodes/', node_dict)
+         address_dict = {'address': u'my_address',
+                         'accounts': []}
          urlopen('/addresses/', address_dict)
 
          # check list
@@ -150,10 +128,9 @@ class ClientTest(unittest.TestCase):
          self.update_and_check('/addresses/my_address',
                                {u'address': u'new_address'},
                                '/addresses/new_address')
-         urlopen('/nodes/', {u'name': u'nother_node'})
-         self.update_and_check('/addresses/new_address',
-                               {u'nodes': [u'nother_node']})
 
+         # *** accounts m2m field is tested below in test_account
+         
     def check_account_data(self, url, expected_data):
         self.check_data(url, expected_data, self.process_acct_recv_data)
 
@@ -173,14 +150,10 @@ class ClientTest(unittest.TestCase):
             recv_data[field] = D(recv_data[field])
 
     def test_account(self):
-        nodes = [{u'name': u'my_node'},
-                 {u'name': u'other_node'}]
-        addresses = [{u'address': u'my_address',
-                      u'nodes': [u'my_node']},
-                     {u'address': u'other_address',
-                      u'nodes': [u'other_node']}]
+        addresses = [{u'address': u'my_address'},
+                     {u'address': u'other_address'}]
         init_acct = {u'name': u'my_account',
-                     u'node': u'my_node',
+                     u'owner': u'blubby blub',
                      u'balance': D(u'0.00'),
                      u'upper_limit': D(u'100.00'),
                      u'lower_limit': D(u'-100.00'),
@@ -191,14 +164,13 @@ class ClientTest(unittest.TestCase):
                      u'note': u'Hey.'}
         partner_acct = {u'name': u'other_account',
                         u'relationship': None,  # set in code once known
-                        u'node': u'other_node',
+                        u'owner': u'noodie nood',
                         u'balance': D(u'0.00'),
                         u'upper_limit': D(u'150.00'),
                         u'lower_limit': D(u'-50.00'),
                         u'limits_expiry_time': None,}
 
-        for node, address in zip(nodes, addresses):
-            urlopen('/nodes/', node)
+        for address in addresses:
             urlopen('/addresses/', address)
 
         urlopen('/accounts/', init_acct)
@@ -220,6 +192,12 @@ class ClientTest(unittest.TestCase):
         # check request
         self.check_data('/accountrequests', [req_data])
 
+        # check address has account now
+        address_data = urlopen('/addresses/my_address')
+        expected_address_data = {'address': u'my_address',
+                                 'accounts': [u'my_account']}
+        self.assertEquals(address_data, expected_address_data)
+        
         # create other account
         partner_acct['relationship'] = req_data['relationship']
         urlopen('/accounts/', partner_acct)
@@ -236,14 +214,19 @@ class ClientTest(unittest.TestCase):
         expected_data['is_active'] = True
         self.check_account_data('/accounts/my_account', expected_data)
 
+        # check partner address has account now
+        address_data = urlopen('/addresses/other_address')
+        expected_address_data = {'address': u'other_address',
+                                 'accounts': [u'other_account']}
+        self.assertEquals(address_data, expected_address_data)
+
         # update account in a few ways
         self.update_and_check_account('/accounts/my_account/',
                                       {u'name': u'new_account'},
                                       '/accounts/new_account')
-        urlopen('/nodes/', {u'name': u'node2'})
         time.sleep(1)  # make sure to get a new timestamp on new limits object
         self.update_and_check_account('/accounts/new_account',
-                                      {u'node': u'node2',
+                                      {u'owner': u'blobby blob',
                                        u'upper_limit': D('823.00102')})
         # make sure old limits got stored
         limits = AccountLimits.query().order_by('effective_time')
@@ -256,6 +239,10 @@ class ClientTest(unittest.TestCase):
         self.failUnless(new_limits.is_active)
 
         # *** do some more various updating here
+
+        # check adding accounts to addresses
+        self.update_and_check('/addresses/my_address',
+                              {'accounts': [u'new_account', u'other_account']})
 
         
     def check_rate_data(self, url, expected_data):

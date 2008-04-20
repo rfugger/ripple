@@ -24,57 +24,11 @@ from ripplebase.resource import *
 from ripplebase.account.dao import *
 
 
-def node_process_incoming(self, d):
-    super(self.__class__, self).process_incoming(d)
-    if 'name' in d:
-        d['name'] = encode_node_name(d['name'], self.client)
-
-def node_process_outgoing(self, d):
-    super(self.__class__, self).process_outgoing(d)
-    if 'name' in d:
-        d['name'] = decode_node_name(d['name'])
-
-class NodeListHandler(RippleObjectListHandler):
-    DAO = NodeDAO
-    process_incoming = node_process_incoming
-    process_outgoing = node_process_outgoing
-
-class NodeHandler(RippleObjectHandler):
-    DAO = NodeDAO
-    process_incoming = node_process_incoming
-    process_outgoing = node_process_outgoing
-
-    def get_data_dict(self, key):
-        "Encode key = name."
-        key = encode_node_name(key, self.client)
-        return super(NodeHandler, self).get_data_dict(key)
-
-    def update(self, keys, data_dict):
-        keys = (encode_node_name(keys[0], self.client),)
-        return super(NodeHandler, self).update(keys, data_dict)
-
-def address_process_incoming(self, data_dict):
-    super(self.__class__, self).process_incoming(data_dict)
-    if 'nodes' in data_dict:
-        data_dict['nodes'] = [encode_node_name(node, self.client) for node
-                              in data_dict.get('nodes', ())]
-
-def address_process_outgoing(self, data_dict):
-    super(self.__class__, self).process_outgoing(data_dict)
-    if 'nodes' in data_dict:
-        data_dict['nodes'] = [decode_node_name(node) for node
-                              in data_dict.get('nodes', ())]
-
 class AddressListHandler(RippleObjectListHandler):
     DAO = AddressDAO
-    process_incoming = address_process_incoming
-    process_outgoing = address_process_outgoing
 
 class AddressHandler(RippleObjectHandler):
     DAO = AddressDAO
-    process_incoming = address_process_incoming
-    process_outgoing = address_process_outgoing
-
 
 account_request_fields = {
     'address': 'source_address',
@@ -88,6 +42,7 @@ class AccountListHandler(RippleObjectListHandler):
     def create(self, data_dict):
         if 'relationship' not in data_dict:
             # create relationship and account request
+            acct_address = data_dict['address']
             rel = RelationshipDAO.create()
             data_dict['relationship'] = rel.id
             req_dict = {'relationship': rel.id}
@@ -99,11 +54,17 @@ class AccountListHandler(RippleObjectListHandler):
         else:  # confirming account by creating dual account
             # *** maybe ought to wait for exchanges before activating acct?
             data_dict['is_active'] = True
+            acct_request = AccountRequestDAO.get(data_dict['relationship'])
+            acct_address = acct_request.dest_address
             AccountRequestDAO.delete(data_dict['relationship'])
             init_acct = AccountDAO.filter(relationship=data_dict['relationship'])[0]
             init_acct.is_active = True  # gets committed later
 
-        super(RippleObjectListHandler, self).create(data_dict)
+        acct = super(AccountListHandler, self).create(data_dict)
+
+        # add new account to appropriate address
+        address = AddressDAO.get(acct_address)
+        address.add_account(acct)
     
 class AccountHandler(RippleObjectHandler):
     DAO = AccountDAO
@@ -121,22 +82,9 @@ class AccountRequestListHandler(RippleObjectListHandler):
 
 class ExchangeRateListHandler(RippleObjectListHandler):
     DAO = ExchangeRateDAO
-    process_incoming = node_process_incoming
-    process_outgoing = node_process_outgoing    
     
 class ExchangeRateHandler(RippleObjectHandler):
     DAO = ExchangeRateDAO
-    process_incoming = node_process_incoming
-    process_outgoing = node_process_outgoing
-
-    def get_data_dict(self, key):
-        "Encode key = name."
-        key = encode_node_name(key, self.client)
-        return super(ExchangeRateHandler, self).get_data_dict(key)
-
-    def update(self, keys, data_dict):
-        keys = (encode_node_name(keys[0], self.client),)
-        return super(ExchangeRateHandler, self).update(keys, data_dict)
 
 class ExchangeListHandler(RippleObjectListHandler):
     DAO = ExchangeDAO

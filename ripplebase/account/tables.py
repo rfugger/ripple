@@ -32,17 +32,6 @@ client_table = sql.Table(
     # *** need login/auth data here
 )
 
-# A node where multiple accounts connect for transfer of value one to the other
-node_table = sql.Table(
-    'node', db.meta,
-    sql.Column('id', sql.Integer, primary_key=True),
-    sql.Column('name', sql.Unicode(256), nullable=False, unique=True),
-    sql.Column('client_id', sql.Integer,
-               sql.ForeignKey('client.id'),
-               nullable=False),
-    sql.Column('is_deleted', sql.Boolean, nullable=False, default=False),
-)
-
 address_table = sql.Table(
     'address', db.meta,
     sql.Column('id', sql.Integer, primary_key=True),
@@ -52,23 +41,8 @@ address_table = sql.Table(
                nullable=False),
 )
 
-# *** may eventually want to track historical node-address associations
-#     for payment accountability
-node_addresses_table = sql.Table(
-    'node_addresses', db.meta,
-#     sql.Column('id', sql.Integer, primary_key=True),
-    sql.Column('node_id', sql.Integer,
-               sql.ForeignKey('node.id'),
-               nullable=False),
-    sql.Column('address_id', sql.Integer,
-               sql.ForeignKey('address.id'),
-               nullable=False),
-#     sql.Column('effective_time', sql.DateTime, nullable=False),
-#     sql.Column('is_active', sql.Boolean, nullable=False),
-)
-
-# A relationship (link/connection between two nodes) contains two accounts,
-# one for each node.
+# A relationship (link/connection between two entities) contains two accounts,
+# one for each entity.
 # *** could probably do away with this table entirely.
 relationship_table = sql.Table(
     'relationship', db.meta,
@@ -82,12 +56,29 @@ account_table = sql.Table(
                sql.ForeignKey('relationship.id'),
                nullable=False),
     sql.Column('name', sql.Unicode(256), nullable=False),
-    sql.Column('node_id', sql.Integer,
-               sql.ForeignKey('node.id'),
-               nullable=False),
+    sql.Column('client_id', sql.Integer,
+               sql.ForeignKey('client.id'),
+               nullable=False),    
+    sql.Column('owner', sql.Unicode(256), nullable=False),
     sql.Column('is_active', sql.Boolean, nullable=False, default=True),
     sql.Column('balance', sql.Numeric(PRECISION, SCALE),
                nullable=False),
+    sql.UniqueConstraint('name', 'client_id'),
+)
+
+# *** may eventually want to track historical account-address associations
+#     for payment accountability
+account_address_association_table = sql.Table(
+    'account_addresses', db.meta,
+#     sql.Column('id', sql.Integer, primary_key=True),
+    sql.Column('account_id', sql.Integer,
+               sql.ForeignKey('account.id'),
+               nullable=False),
+    sql.Column('address_id', sql.Integer,
+               sql.ForeignKey('address.id'),
+               nullable=False),
+#     sql.Column('effective_time', sql.DateTime, nullable=False),
+#     sql.Column('is_active', sql.Boolean, nullable=False),
 )
 
 account_limits_table = sql.Table(
@@ -143,6 +134,7 @@ exchange_rate_table = sql.Table(
     sql.Column('client_id', sql.Integer,
                sql.ForeignKey('client.id'),
                nullable=False),
+    sql.UniqueConstraint('name', 'client_id'),
 )
 
 # exchange-exchange rate association/history table

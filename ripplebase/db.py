@@ -59,8 +59,9 @@ def reset(drop=True, init_data=True):
     
     # *** install a default client until multi-client support is ready
     if init_data:
-        from ripplebase.account.dao import ClientDAO
-        ClientDAO.create(name=settings.TEST_CLIENT)
+        from ripplebase.account.mappers import Client
+        test_client = Client()
+        test_client.name=settings.TEST_CLIENT
         commit()
 
 class SimpleDAO(object):
@@ -84,7 +85,7 @@ class SimpleDAO(object):
         dao = cls(data_obj)
         dao.update(**kwargs)
         return dao
-
+    
     def __setattr__(self, attr, value):
         if attr in self.db_fields:
             setattr(self.data_obj, self.db_fields[attr], value)
@@ -99,32 +100,35 @@ class SimpleDAO(object):
                                  (self.__class__, attr))
 
     @classmethod
-    def _get_data_obj(cls, *keys, **kwargs):
-        q = cls.filter(**dict(zip(cls.keys, keys))).query
-        return kwargs.get('fail_if_not_exist') and q.one() or q.first()
+    def _query(cls, *keys, **kwargs):
+        """Returns APIQuery containing result.
+        kwargs contains extra non-DAO-key arguments to filter."""
+        kwargs.update(**dict(zip(cls.keys, keys)))
+        return cls.filter(**kwargs)
     
     @classmethod
-    def get(cls, *keys):
-        data_obj = cls._get_data_obj(*keys)
+    def get(cls, *keys, **kwargs):
+        data_obj = cls._query(*keys, **kwargs).query.one()
         return cls(data_obj)
 
     @classmethod
-    def exists(cls, *keys):
-        kwargs = dict(fail_if_not_exist=False)
-        return cls._get_data_obj(*keys, **kwargs) is not None
+    def exists(cls, *keys, **kwargs):
+        return cls._query(*keys, **kwargs).query.first() is not None
     
     @classmethod
-    def delete(cls, *keys):
-        data_obj = cls._get_data_obj(*keys)
+    def delete(cls, *keys, **kwargs):
+        data_obj = cls._query(*keys, **kwargs).query.one()
         delete(data_obj)
 
     @classmethod
     def _api_to_db(cls, **kwargs):
-        return dict([(cls.db_fields[api_field], value)
+        "Converts DAO field names to DB field names, leaving unknown names alone."
+        return dict([(cls.db_fields.get(api_field, api_field), value)
                      for api_field, value in kwargs.items()])
         
     @classmethod
     def filter(cls, **kwargs):
+        "Can pass both DAO field names and extra DB field names as params."
         q = query(cls.model)
         if kwargs:
             q = q.filter_by(**cls._api_to_db(**kwargs))
@@ -137,9 +141,6 @@ class SimpleDAO(object):
 
     def update(self, **kwargs):
         for field, value in kwargs.items():
-            # check that field is valid
-            assert field in self.db_fields.keys(), \
-                "Invalid field: '%s'." % field
             setattr(self, field, value)
         flush()
         
@@ -152,11 +153,14 @@ class DAO(SimpleDAO):
     # api_field: dao_class (DAO must have single api key)
     fk_daos = {}
     m2m_daos = {}
+
+    def _get_foreign_dao(self, dao_class, *keys):
+        return dao_class.get(*keys)
     
     def __setattr__(self, attr, value):
         if attr in self.fk_daos:
             # get FK DAO by API key
-            dao = self.fk_daos[attr].get(value)
+            dao = self._get_foreign_dao(self.fk_daos[attr], value)
             # set FK relation field to foreign data_obj
             setattr(self.data_obj,
                     self.db_fields[attr],
@@ -164,8 +168,10 @@ class DAO(SimpleDAO):
         elif attr in self.m2m_daos:
             dao_class = self.m2m_daos[attr]
             setattr(self.data_obj, attr, [])
+            # *** inefficient to get foreign objects one at a time
+            #     better to get all at once
             for key in value:  # value is list of m2m DAO keys
-                dao = dao_class.get(key)
+                dao = self._get_foreign_dao(dao_class, key)
                 getattr(self.data_obj, attr).append(dao.data_obj)
         else:  # set like regular attribute
             super(DAO, self).__setattr__(attr, value)
@@ -215,7 +221,57 @@ class DAO(SimpleDAO):
     
 def get_dao_key_db_field(DAO):
     return DAO.db_fields[DAO.keys[0]]
+
+class RippleDAO(DAO):
+    """Adds client-awareness.  Client field is special because it is
+    implicit in client requests, and so must be injected by
+    request handler.  For this reason, can use synthetic DB key for client
+    instead of natural key, therefore need to handle this specially in
+    the DAO.
     
+    Users of this class must check for required client fields and keys and
+    use it appropriately.  For example, when there is a client field, even
+    only in a related object, you must pass it in to create as a kwarg.
+    When the client field is a key, you must pass it in to get, etc.
+    """
+    has_client_field = False
+    has_client_as_key = False
+
+    @classmethod
+    def create(cls, **kwargs):
+        data_obj = cls.model()
+        if cls.has_client_field:
+            data_obj.client = kwargs['client']
+        dao = cls(data_obj)
+        dao.update(**kwargs)
+        return dao
+
+    def update(self, **kwargs):
+        if 'client' in kwargs:
+            self.client = kwargs['client']
+            del kwargs['client']
+        super(RippleDAO, self).update(**kwargs)
+    
+#     def __setattr__(self, attr, value):
+#         if attr == 'client' and self.has_client_field:
+#             setattr(self.data_obj, attr, value)
+#         else:
+#             super(RippleDAO, self).__setattr__(attr, value)
+
+#     def __getattr__(self, attr):
+#         if attr == 'client' and self.has_client_field:
+#             return getattr(self.data_obj, attr)
+#         else:
+#             return super(RippleDAO, self).__getattr__(attr)
+
+    def _get_foreign_dao(self, dao_class, *keys):
+        "Be aware of foreign DAOs with Client fields."
+        if getattr(dao_class, 'has_client_as_key', False):
+            return dao_class.get(*keys, **dict(client=self.client))
+        else:
+            return super(RippleDAO, self)._get_foreign_dao(dao_class, *keys)
+
+
 class APIQuery(object):
     """Wrapper for SQLAlchemy Query, returns DAO objects
     during iteration."""
@@ -244,3 +300,12 @@ class APIQuery(object):
 
     def __getitem__(self, n):
         return self.dao_class(self.query[n])
+
+    def one(self):
+        "Return first element, raising exception if none exists."
+        return self.dao_class(self.query.one())
+
+    def first(self):
+        "Return first element, or None if none exists."
+        obj = self.query.first()
+        return obj and self.dao_class(obj)

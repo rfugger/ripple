@@ -28,60 +28,20 @@ from ripplebase.account.mappers import *
 from ripplebase import db
 from ripplebase.account.tables import *
 
-class ClientDAO(db.DAO):
-    model = Client
-    db_fields = {
-        'name': 'name',  # *** map to 'id'?
-    }
-    keys = ['name']
 
-class NodeDAO(db.DAO):
-    model = Node
-    db_fields = {
-        'name': 'name',  # unique for whole server (encode with client at higher level)
-        # *** map to 'id'?
-        'client': 'client',  # maps to Client.name
-        'addresses': None,  # maps to m2m association table
-    }
-    keys = ['name']
-    fk_daos = {
-        'client': ClientDAO,
-    }
-    # m2m_daos after AddressDAO, because it needs it.
-
-class AddressDAO(db.DAO):
-    model = Address
-    db_fields = {
-        'address': 'address',
-        'client': 'client',  # maps to Client.name
-        'nodes': None,  # maps to m2m association table
-    }
-    keys = ['address']
-    fk_daos = {
-        'client': ClientDAO,
-    }
-    m2m_daos = {
-        'nodes': NodeDAO,
-    }
-
-# must define this after defining AddressDAO
-NodeDAO.m2m_daos = {
-    'addresses': AddressDAO,
-}
-
-class RelationshipDAO(db.DAO):
+class RelationshipDAO(db.RippleDAO):
     model = Relationship
     db_fields = {
         'id': 'id',
     }
     keys = ['id']
         
-class AccountDAO(db.DAO):
+class AccountDAO(db.RippleDAO):
     model = Account
     db_fields = {
         'name': 'name',  # *** map to 'id'?
         'relationship': 'relationship',
-        'node': 'node',
+        'owner': 'owner',
         'is_active': 'is_active',
         'balance': 'balance',
         'upper_limit': None,  # maps to AccountLimits.upper_limit
@@ -92,9 +52,10 @@ class AccountDAO(db.DAO):
     keys = ['name']
     fk_daos = {
         'relationship': RelationshipDAO,
-        'node': NodeDAO,
     }
-
+    has_client_field = True
+    has_client_as_key = True
+    
     limits_map = {
         'upper_limit': 'upper_limit',
         'lower_limit': 'lower_limit',
@@ -168,7 +129,23 @@ class AccountDAO(db.DAO):
                              limits_args)
         return super(AccountDAO, cls).filter(**kwargs)
         
-class AccountRequestDAO(db.DAO):
+class AddressDAO(db.RippleDAO):
+    model = Address
+    db_fields = {
+        'address': 'address',
+        'accounts': None,  # maps to m2m association table
+    }
+    keys = ['address']
+    m2m_daos = {
+        'accounts': AccountDAO,
+    }
+    has_client_field = True
+
+    def add_account(self, account_dao):
+        self.data_obj.accounts.append(account_dao.data_obj)
+        db.flush()
+    
+class AccountRequestDAO(db.RippleDAO):
     model = AccountRequest
     db_fields = {
         'relationship': 'relationship',
@@ -184,7 +161,7 @@ class AccountRequestDAO(db.DAO):
         'dest_address': AddressDAO,
     }
     
-class ExchangeDAO(db.DAO):
+class ExchangeDAO(db.RippleDAO):
     model = Exchange
     db_fields = {
         'source_account': 'source_account',
@@ -234,19 +211,17 @@ class ExchangeDAO(db.DAO):
         return super(ExchangeDAO, cls).filter(**kwargs)
 
             
-class ExchangeRateDAO(db.DAO):
+class ExchangeRateDAO(db.RippleDAO):
     model = ExchangeRate
     db_fields = {
         'name': 'name',
-        'client': 'client',
         'rate': None,  # maps to ExchangeRateValue.rate
         'effective_time': None,  # maps to ExchangeRateValue.effective_time 
         'expiry_time': None,  # maps to ExchangeRateValue.expiry_time
     }
     keys = ['name']
-    fk_daos = {
-        'client': ClientDAO,
-    }
+    has_client_field = True
+    has_client_as_key = True
     
     value_map = {
         'rate': 'value',

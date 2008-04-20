@@ -19,11 +19,13 @@
 ##################
 
 import re
+import traceback
 
 from twisted.web import resource, http, server
 from twisted.internet import threads
 
 from ripplebase import db, json, settings
+from ripplebase.account.mappers import Client
 
 class Http404(Exception):
     pass
@@ -84,15 +86,16 @@ class JSONSiteResource(SiteResource):
                           'application/json; charset=utf-8')
             body = SiteResource.render(self, request)
         except Http404, h:
-            if settings.DEBUG: print h
+            if settings.DEBUG: traceback.print_exc()
             request.setResponseCode(http.NOT_FOUND)
             body = str(h)
         except Exception, e:  # *** this might catch too much
-            if settings.DEBUG: print e
+            if settings.DEBUG: traceback.print_exc()
             request.setResponseCode(http.INTERNAL_SERVER_ERROR)
             body = str(e)
         # close out db session -- very important with threads
-        db.session.close()
+        db.commit()
+        db.close()
         if body not in (None, ''):
             json_body = encode_response(body)
             if settings.DEBUG:
@@ -124,8 +127,8 @@ class RequestHandler(object):
     
     def __init__(self, request):
         self.request = request
-        # *** replace with actual client
-        self.client = settings.TEST_CLIENT
+        # *** replace with actual requesting client
+        self.client = db.query(Client).filter_by(name=settings.TEST_CLIENT).one()
     
     def __call__(self, request, *args, **kwargs):
         "Creates resource object and calls appropriate method for this request."
@@ -146,6 +149,7 @@ class RequestHandler(object):
         return self.get(request, *args, **kwargs)
 
 
+# *** add validators to request handlers below
 class ObjectListHandler(RequestHandler):
     "Handler for CRUD on a particular API data model."
     allowedMethods = ('GET', 'POST', 'HEAD')
@@ -153,32 +157,24 @@ class ObjectListHandler(RequestHandler):
     # Set in subclasses
     DAO = None
 
-    def processing_incoming(self, data_dict):
-        "Alter incoming data_dict."
-        pass
-    def process_outgoing(self, data_dict):
-        "Alter outgoing data_dict."
-        pass
-    
     def get(self):
         "Render list of objects."
+        # *** here is where filter params would be gotten from request URI
         return list(self.filter())
 
     def post(self):
         "Create new object."
         data_dict = de_unicodify_keys(self.request.parsed_content)
-        self.process_incoming(data_dict)
         self.create(data_dict)
+        #db.commit()
 
     def create(self, data_dict):
         obj = self.DAO.create(**data_dict)
-        db.commit()
         return obj
 
-    def filter(self):
-        for obj in self.DAO.filter():
+    def filter(self, **kwargs):
+        for obj in self.DAO.filter(**kwargs):
             data_dict = obj.data_dict()
-            self.process_outgoing(data_dict)
             yield data_dict
 
 class ObjectHandler(RequestHandler):
@@ -189,86 +185,57 @@ class ObjectHandler(RequestHandler):
     # set in subclasses
     DAO = None
 
-    def processing_incoming(self, data_dict):
-        "Alter incoming data_dict."
-        pass
-    def process_outgoing(self, data_dict):
-        "Alter outgoing data_dict."
-        pass
-    
     def get(self, *keys):
         "Returns data_dict for object."
         keys = [unicode(key) for key in keys]
-        data_dict = self.get_data_dict(*keys)
-        self.process_outgoing(data_dict)
-        return data_dict
+        dao = self._get_dao(*keys)
+        return dao.data_dict()
 
     def post(self, *keys):
         "Update existing object."
         keys = [unicode(key) for key in keys]
         data_dict = de_unicodify_keys(self.request.parsed_content)
-        self.process_incoming(data_dict)
         self.update(keys, data_dict)
+        #db.commit()
 
     def delete(self, *keys):
+        # don't forget to commit here
         return NotImplemented
 
-    def get_data_dict(self, *keys):
-        return self.DAO.get(*keys).data_dict()        
+    def _get_dao(self, *keys):
+        return self.DAO.get(*keys)
 
     def update(self, keys, data_dict):
-        obj = self.DAO.get(*keys)
+        obj = self._get_dao(*keys)
         obj.update(**data_dict)
-        db.commit()
 
 def de_unicodify_keys(d):
     "Makes dict keys regular strings so it can be used for kwargs."
     return dict((str(key), value) for key, value in d.items())
 
 
-def encode_node_name(node_name, client_id):
-    return '%s/%s' % (client_id, node_name)
-def decode_node_name(encoded_node_name):
-    return encoded_node_name[encoded_node_name.find('/') + 1:]
-
-# for inclusion in classes below
-def process_incoming(self, data_dict):
-    "Encode node name to make it unique per client."
-    if 'node' in data_dict:
-        data_dict['node'] = encode_node_name(data_dict['node'], self.client)
-
-def process_outgoing(self, data_dict):
-    "Remove client from data_dict, decode node name."
-    if 'client' in data_dict:
-        del data_dict['client']
-    if 'node' in data_dict:
-        data_dict['node'] = decode_node_name(data_dict['node'])
-
 class RippleObjectListHandler(ObjectListHandler):
-    """For DAOs that have a client field, which is implicit
-    in the API, since the server knows who the client is already.
-    """
-    process_incoming = process_incoming
-    process_outgoing = process_outgoing
-
+    "Handle client field."
     def create(self, data_dict):
-        "Add client key to data_dict."
-        if 'client' in self.DAO.db_fields:
-            data_dict['client'] = self.client
+        """Need to give ref to client even if this DAO doesn't use it --
+        may be needed to look up a foreign object reference.
+        """
+        data_dict['client'] = self.client
         return super(RippleObjectListHandler, self).create(data_dict)
 
-    def filter(self):
-        if 'client' in self.DAO.db_fields:
-            filter_kwargs = {self.DAO.db_fields['client']: self.client}
-        else:
-            filter_kwargs = {}
-        for obj in self.DAO.filter(**filter_kwargs):
-            d = obj.data_dict()
-            self.process_outgoing(d)
-            yield d
+    # filter should be OK here because it traverses DB relationships,
+    # which use DB keys, not natural keys involving the client.
     
 class RippleObjectHandler(ObjectHandler):
-    # reuse methods
-    process_incoming = process_incoming
-    process_outgoing = process_outgoing
+    def _get_dao(self, *keys):
+        if self.DAO.has_client_as_key:
+            return self.DAO.get(*keys, **dict(client=self.client))
+        else:
+            return super(RippleObjectHandler, self)._get_dao(*keys)
 
+    def update(self, keys, data_dict):
+        """Need to give ref to client even if this DAO doesn't use it --
+        may be needed to look up a foreign object reference.
+        """
+        data_dict['client'] = self.client
+        super(RippleObjectHandler, self).update(keys, data_dict)

@@ -33,17 +33,6 @@ db.mapper(Client, client_table)
 
 class Address(object):
     pass
-db.mapper(Address, address_table, properties={
-    'client': orm.relation(Client)})
-
-class Node(object):
-    pass
-db.mapper(Node, node_table, properties={
-    'client': orm.relation(Client),
-    'addresses': orm.relation(Address,
-                              secondary=node_addresses_table,
-                              backref='nodes')})  # m2m
-
 class Relationship(object):
     pass
 class Account(object):
@@ -51,10 +40,15 @@ class Account(object):
 class AccountLimits(object):
     pass
 
+db.mapper(Address, address_table, properties={
+    'client': orm.relation(Client),
+    'accounts': orm.relation(Account,
+                             secondary=account_address_association_table,
+                             backref='addresses')})  # m2m
 db.mapper(Relationship, relationship_table)
 db.mapper(Account, account_table, properties={
     'relationship': orm.relation(Relationship),
-    'node': orm.relation(Node),
+    'client': orm.relation(Client),
     # *** eager load active limits
     })
 db.mapper(AccountLimits, account_limits_table, properties={
