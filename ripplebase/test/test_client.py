@@ -338,7 +338,7 @@ class ClientTest(unittest.TestCase):
 
         exchange = {'source_account': u'my_account',
                     'target_account': u'other_account',
-                    'rate': u'USDCAD'}
+                    'rate': rate1['name']}
 
         for address in addresses:
             urlopen('/addresses/', address)
@@ -352,7 +352,16 @@ class ClientTest(unittest.TestCase):
         self.check_data('/exchanges/%s/%s' % (exchange['source_account'],
                                               exchange['target_account']),
                         exchange)
-                   
+
+        # alter rate, check history is stored
+        time.sleep(1)  # make sure time is different
+        self.update_and_check('/exchanges/%s/%s' % (exchange['source_account'],
+                                                    exchange['target_account']),
+                              {'rate': rate2['name']})
+        eers = list(db.query(ExchangeExchangeRate).order_by('effective_time'))
+        self.assertEquals(eers[0].rate.name, rate1['name'])
+        self.assertEquals(eers[1].rate.name, rate2['name'])
+        self.failUnless(eers[0].effective_time < eers[1].effective_time)
         
         
 def str_to_datetime(s):

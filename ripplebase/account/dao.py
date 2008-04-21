@@ -182,14 +182,8 @@ class ExchangeDAO(db.RippleDAO):
     
     def __getattr__(self, attr):
         if attr == 'rate':
-            statement = sql.select(
-                [exchange_rate_table.c.name],
-                from_obj= exchange_rate_table.join(
-                    exchange_exchange_rate_table,
-                    exchange_exchange_rate_table.c.exchange_id==self.data_obj.id,
-                    exchange_exchange_rate_table.c.is_active==True))
-            result = db.session.execute(statement)
-            return result.fetchone()[exchange_rate_table.c.name]
+            eer = self._get_active_exchange_exchange_rate()
+            return eer.rate.name
         else:
             return super(ExchangeDAO, self).__getattr__(attr)
 

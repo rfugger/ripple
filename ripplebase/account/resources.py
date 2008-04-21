@@ -91,3 +91,8 @@ class ExchangeListHandler(RippleObjectListHandler):
     
 class ExchangeHandler(RippleObjectHandler):
     DAO = ExchangeDAO
+
+    def update(self, keys, data_dict):
+        if 'source_account' in data_dict or 'target_account' in data_dict:
+            raise ValueError("Source and target accounts cannot be changed.")
+        super(ExchangeHandler, self).update(keys, data_dict)
