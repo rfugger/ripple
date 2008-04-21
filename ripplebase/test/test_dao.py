@@ -292,7 +292,7 @@ class ExchangeRateDAOTest(DAOTest):
     data = [
         {'name': u'USDCAD',
          'client': client_data[0]['name'],
-         'rate': D('1.0244'),
+         'value': D('1.0244'),
          'effective_time': datetime(2008, 3, 10, 23, 21, 23, 945000),
          'expiry_time': datetime(2008, 3, 11, 23, 21, 23, 945000),}
     ]

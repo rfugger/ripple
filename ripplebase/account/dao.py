@@ -210,7 +210,7 @@ class ExchangeRateDAO(db.RippleDAO):
     model = ExchangeRate
     db_fields = {
         'name': 'name',
-        'rate': None,  # maps to ExchangeRateValue.rate
+        'value': None,  # maps to ExchangeRateValue.rate
         'effective_time': None,  # maps to ExchangeRateValue.effective_time 
         'expiry_time': None,  # maps to ExchangeRateValue.expiry_time
     }
@@ -219,47 +219,48 @@ class ExchangeRateDAO(db.RippleDAO):
     has_client_as_key = True
     
     value_map = {
-        'rate': 'value',
+        'value': 'value',
         'effective_time': 'effective_time',  # set automatically
         'expiry_time': 'expiry_time',
     }
 
-    def _get_active_value(self):
-        if not hasattr(self, '_value'):
-            self._value = db.query(ExchangeRateValue).filter_by(
+    def _get_active_value_obj(self):
+        if not hasattr(self, '_value_obj'):
+            self._value_obj = db.query(ExchangeRateValue).filter_by(
                 rate=self.data_obj, is_active=True).first()
-        return self._value
-    def _set_active_value(self, value):
-        self._value = value
-    value = property(_get_active_value, _set_active_value)
+        return self._value_obj
+    def _set_active_value_obj(self, value_obj):
+        self._value_obj = value_obj
+    value_obj = property(_get_active_value_obj, _set_active_value_obj)
     
-    def new_value(self):
+    def new_value_obj(self):
         """Call every time new value is set.
-        Sets old value (if it exists) to inactive, creates
-        new active value record.
+        Sets old value_obj (if it exists) to inactive, creates
+        new active value_obj record.
         Must then set value and effective,
         expiry times before flushing to db.
         """
-        if self.value:
-            self.value.is_active = False
-        self.value = ExchangeRateValue()
-        self.value.rate = self.data_obj
+        if self.value_obj:
+            self.value_obj.is_active = False
+        self.value_obj = ExchangeRateValue()
+        self.value_obj.is_active = True
+        self.value_obj.rate = self.data_obj
         # *** may be outstanding transactions using old value
         # *** must guard against this when committing transaction!
     
     def __setattr__(self, attr, value):
         if attr in self.value_map:
             # make new value obj if one doesn't exist
-            if not self.value:
-                self.new_value()
-            setattr(self.value, self.value_map[attr], value)
+            if not self.value_obj:
+                self.new_value_obj()
+            setattr(self.value_obj, self.value_map[attr], value)
         else:
             super(ExchangeRateDAO, self).__setattr__(attr, value)
 
     def __getattr__(self, attr):
         if attr in self.value_map:
-            if self.value:
-                return getattr(self.value, self.value_map[attr])
+            if self.value_obj:
+                return getattr(self.value_obj, self.value_map[attr])
             else:
                 return None
         else:
@@ -269,7 +270,7 @@ class ExchangeRateDAO(db.RippleDAO):
         "Create new value object if value is being changed."
         value_args = set(kwargs.keys()).intersection(self.value_map.keys())
         if value_args:
-            self.new_value()
+            self.new_value_obj()
         super(ExchangeRateDAO, self).update(**kwargs)
 
     @classmethod

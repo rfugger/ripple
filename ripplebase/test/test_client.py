@@ -272,14 +272,14 @@ class ClientTest(unittest.TestCase):
                 self.fail("Invalid 'effective_time' returned: '%s'."
                           "Error was: %s." % (effective_time, ve))
             del recv_data['effective_time']
-            recv_data['rate'] = D(recv_data['rate'])
+            recv_data['value'] = D(recv_data['value'])
 
     def test_exchangerate(self):
         rate1 = {'name': u'USDCAD',
-                 'rate': D('1.0232'),
+                 'value': D('1.0232'),
                  'expiry_time': None}
         rate2 = {'name': u'gAuhrs',
-                 'rate': D('0.003943'),
+                 'value': D('0.003943'),
                  'expiry_time': None}
 
         urlopen('/rates/', rate1)
@@ -292,12 +292,12 @@ class ClientTest(unittest.TestCase):
 
         time.sleep(1)  # make sure different time appears on new rate
         self.update_and_check_rate('/rates/%s' % rate1['name'],
-                                   {'rate': D('0.8452342')})
+                                   {'value': D('0.8452342')})
         # make sure old values got stored
         values = ExchangeRateValue.query().order_by('effective_time')
         old_value = values[0]
         new_value = values[2]
-        self.assertEquals(old_value.value, rate1['rate'])
+        self.assertEquals(old_value.value, rate1['value'])
         self.assertEquals(new_value.value, D('0.8452342'))
         self.failUnless(old_value.effective_time < new_value.effective_time)
         self.failUnless(old_value.is_active == False)
@@ -330,10 +330,10 @@ class ClientTest(unittest.TestCase):
                      u'partner': u'other_address',
                      u'note': u'Heya.'}]
         rate1 = {'name': u'USDCAD',
-                 'rate': D('1.0232'),
+                 'value': D('1.0232'),
                  'expiry_time': None}
         rate2 = {'name': u'gAuhrs',
-                 'rate': D('0.003943'),
+                 'value': D('0.003943'),
                  'expiry_time': None}
 
         exchange = {'source_account': u'my_account',
