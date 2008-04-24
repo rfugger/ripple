@@ -20,16 +20,42 @@
 # see <http://www.gnu.org/licenses/>.
 ##################
 
-from mappers import *
-from ripplebase import db
+from ripplebase.payment.mappers import *
+from ripplebase.account.dao import AddressDAO
 
-class PaymentDAO(db.DAO):
+class PaymentDAO(db.RippleDAO):
     model = Payment
-    fields = {}
-    keys = []
+    fields = {
+        'id': 'id',
+        'payer': 'payer',
+        'recipient': 'recipient',
+        'amount': 'amount',
+        'for_recipient': 'for_recipient',
+        'units': 'units',
+        'status': 'status',
+        'accounts': None,  # custom field, (accountname, exchangerate) pairs
+    }
+    keys = ['id']
+    fk_daos = {
+        'payer': AddressDAO,
+        'recipient': AddressDAO,
+    }
 
-    @classmethod
-    def api_to_db(cls, **kwargs):
-        pass
+    # *** handle accounts field -- different for payer and recipient
 
+class PaymentPathDAO(db.RippleDAO):
+    "For payer info only, before approving payment."
+    model = PaymentPath
+    fields = {
+        'payment': 'payment',
+        'paying_account': None,  # gotten from first PaymentLink
+        'payer_amount': 'payer_amount',
+        'recipient_amount': 'recipient_amount',
+    }
+    # no keys necessary - filter by payment
+    fk_daos = {
+        'payment': PaymentDAO,
+    }
+        
+    
     
