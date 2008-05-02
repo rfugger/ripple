@@ -123,7 +123,7 @@ class ThreadedJSONSiteResource(JSONSiteResource):
 
 class RequestHandler(object):
     "Generic HTTP resource callable from url framework."
-    allowedMethods = ('GET', 'POST', 'DELETE', 'PUT', 'HEAD')
+    allowed_methods = ('GET', 'POST', 'DELETE', 'PUT', 'HEAD')
     
     def __init__(self, request):
         self.request = request
@@ -132,8 +132,8 @@ class RequestHandler(object):
     
     def __call__(self, request, *args, **kwargs):
         "Creates resource object and calls appropriate method for this request."
-        if request.method not in self.allowedMethods:
-            raise server.UnsupportedMethod(getattr(self, 'allowedMethods', ()))
+        if request.method not in self.allowed_methods:
+            raise server.UnsupportedMethod(getattr(self, 'allowed_methods', ()))
         return getattr(self, request.method.lower())(*args, **kwargs)
 
     def get(self, *args, **kwargs):
@@ -152,7 +152,9 @@ class RequestHandler(object):
 # *** add validators to request handlers below
 class ObjectListHandler(RequestHandler):
     "Handler for CRUD on a particular API data model."
-    allowedMethods = ('GET', 'POST', 'HEAD')
+    allowed_methods = ('GET', 'POST', 'HEAD')
+    required_fields = ()
+    optional_fields = ()
     
     # Set in subclasses
     DAO = None
@@ -165,6 +167,7 @@ class ObjectListHandler(RequestHandler):
     def post(self):
         "Create new object."
         data_dict = de_unicodify_keys(self.request.parsed_content)
+        self.validate(data_dict)
         self.create(data_dict)
         #db.commit()
 
@@ -172,16 +175,29 @@ class ObjectListHandler(RequestHandler):
         obj = self.DAO.create(**data_dict)
         return obj
 
+    def validate(self, data_dict):
+        for field in self.required_fields:
+            if field not in data_dict:
+                raise ValueError("%s is a required field." % field)
+        all_fields = self.required_fields + self.optional_fields
+        for field in data_dict:
+            if field not in all_fields:
+                raise ValueError("%s is not a recognized field." % field)
+    
     def filter(self, **kwargs):
         for obj in self.DAO.filter(**kwargs):
-            data_dict = obj.data_dict()
-            yield data_dict
+            yield self.repr(obj)
+
+    def repr(self, dao):
+        return dao.data_dict()
+        
 
 class ObjectHandler(RequestHandler):
     """Handler for actions on a single object.
     """
-    allowedMethods = ('GET', 'POST', 'DELETE', 'HEAD')
-
+    allowed_methods = ('GET', 'POST', 'DELETE', 'HEAD')
+    mutable_fields = ()
+    
     # set in subclasses
     DAO = None
 
@@ -189,17 +205,19 @@ class ObjectHandler(RequestHandler):
         "Returns data_dict for object."
         keys = [unicode(key) for key in keys]
         dao = self._get_dao(*keys)
-        return dao.data_dict()
+        return self.repr(dao)
 
     def post(self, *keys):
         "Update existing object."
         keys = [unicode(key) for key in keys]
         data_dict = de_unicodify_keys(self.request.parsed_content)
+        self.validate(data_dict)
         self.update(keys, data_dict)
-        #db.commit()
 
+    def repr(self, dao):
+        return dao.data_dict()
+        
     def delete(self, *keys):
-        # don't forget to commit here
         return NotImplemented
 
     def _get_dao(self, *keys):
@@ -209,6 +227,11 @@ class ObjectHandler(RequestHandler):
         obj = self._get_dao(*keys)
         obj.update(**data_dict)
 
+    def validate(self, data_dict):
+        for field in data_dict:
+            if field not in self.mutable_fields:
+                raise ValueError("%s not a mutable field." % field)
+            
 def de_unicodify_keys(d):
     "Makes dict keys regular strings so it can be used for kwargs."
     return dict((str(key), value) for key, value in d.items())

@@ -34,8 +34,12 @@ urls = (
     (r'^/rates/?$', acct.ExchangeRateListHandler),
     (r'^/rates/([^/]+)/?$', acct.ExchangeRateHandler),
 
-    (r'^/exchanges/?$', acct.ExchangeListHandler),
-    (r'^/exchanges/([^/]+)/([^/]+)/?$', acct.ExchangeHandler),
+    (r'^/exchanges/?$', acct.ThruExchangeListHandler),
+    (r'^/exchanges/([^/]+)/([^/]+)/?$', acct.ThruExchangeHandler),
+    (r'^/inexchanges/?$', acct.InExchangeListHandler),
+    (r'^/inexchanges/([^/]+)/([^/]+)/?$', acct.InExchangeHandler),
+    (r'^/outexchanges/?$', acct.OutExchangeListHandler),
+    (r'^/outexchanges/([^/]+)/([^/]+)/?$', acct.OutExchangeHandler),
 
     (r'^/payments/?$', pmt.PaymentListHandler),
     (r'^/payments/([^/]+)/?$', pmt.PaymentHandler),

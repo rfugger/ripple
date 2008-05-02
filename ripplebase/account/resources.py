@@ -26,9 +26,13 @@ from ripplebase.account.dao import *
 
 class AddressListHandler(RippleObjectListHandler):
     DAO = AddressDAO
+    required_fields = ('address',)
+    optional_fields = ('owner', 'accounts',)
 
 class AddressHandler(RippleObjectHandler):
     DAO = AddressDAO
+    mutable_fields = AddressDAO.db_fields.keys()
+
 
 account_request_fields = {
     'address': 'source_address',
@@ -38,9 +42,19 @@ account_request_fields = {
 
 class AccountListHandler(RippleObjectListHandler):
     DAO = AccountDAO
-
+    required_fields = ('name', 'balance',)
+    optional_fields = ('owner', 'upper_limit', 'lower_limit',
+                       'limits_expiry_time',
+                       # these are for initial account only
+                       'address', 'partner', 'note',
+                       # these are required for confirmation only
+                       'relationship')
+                       
     def create(self, data_dict):
         if 'relationship' not in data_dict:
+            for field in ('address', 'partner'):
+                if field not in data_dict:
+                    raise ValueError("%s is a required field." % field)
             # create relationship and account request
             acct_address = data_dict['address']
             rel = RelationshipDAO.create()
@@ -68,31 +82,73 @@ class AccountListHandler(RippleObjectListHandler):
     
 class AccountHandler(RippleObjectHandler):
     DAO = AccountDAO
-
-    def update(self, keys, data_dict):
-        if 'limits_effective_time' in data_dict:
-            raise ValueError("'limits_effective_time' is read-only.")
-        if 'relationship' in data_dict:
-            raise ValueError("'relationship' is read-only.")
-        super(AccountHandler, self).update(keys, data_dict)
+    mutable_fields = ('name', 'owner', 'balance', 'upper_limit', 'lower_limit',
+                      'limits_expiry_time')
 
 class AccountRequestListHandler(RippleObjectListHandler):
-    allowedMethods = ('GET', 'HEAD')
+    allowed_methods = ('GET', 'HEAD')
     DAO = AccountRequestDAO
 
 class ExchangeRateListHandler(RippleObjectListHandler):
     DAO = ExchangeRateDAO
+    required_fields = ('name', 'value')
+    optional_fields = ('expiry_time',)
     
 class ExchangeRateHandler(RippleObjectHandler):
     DAO = ExchangeRateDAO
-
-class ExchangeListHandler(RippleObjectListHandler):
-    DAO = ExchangeDAO
+    mutable_fields = ('name', 'value', 'expiry_time')
     
-class ExchangeHandler(RippleObjectHandler):
+class ThruExchangeListHandler(RippleObjectListHandler):
     DAO = ExchangeDAO
+    required_fields = ('source_account', 'target_account', 'rate')
 
-    def update(self, keys, data_dict):
-        if 'source_account' in data_dict or 'target_account' in data_dict:
-            raise ValueError("Source and target accounts cannot be changed.")
-        super(ExchangeHandler, self).update(keys, data_dict)
+    def repr(self, dao):
+        return dao.thru_data_dict()
+
+class ThruExchangeHandler(RippleObjectHandler):
+    DAO = ExchangeDAO
+    mutable_fields = ('rate',)
+
+    def _get_dao(self, *keys):
+        keys = keys + (None,)  # add in 'unit' key for ExchangeDAO
+        return super(ThruExchangeHandler, self)._get_dao(*keys)
+    
+    def repr(self, dao):
+        return dao.thru_data_dict()
+    
+class InExchangeListHandler(RippleObjectListHandler):
+    DAO = ExchangeDAO
+    required_fields = ('unit', 'target_account', 'rate')
+
+    def repr(self, dao):
+        return dao.in_data_dict()
+
+class InExchangeHandler(RippleObjectHandler):
+    DAO = ExchangeDAO
+    mutable_fields = ('rate',)
+
+    def _get_dao(self, *keys):
+        keys = (None,) + keys  # add in 'source_account' key for ExchangeDAO
+        return super(InExchangeHandler, self)._get_dao(*keys)
+
+    def repr(self, dao):
+        return dao.in_data_dict()
+    
+class OutExchangeListHandler(RippleObjectListHandler):
+    DAO = ExchangeDAO
+    required_fields = ('unit', 'source_account', 'rate')
+
+    def repr(self, dao):
+        return dao.out_data_dict()
+
+class OutExchangeHandler(RippleObjectHandler):
+    DAO = ExchangeDAO
+    mutable_fields = ('rate',)
+
+    def _get_dao(self, *keys):
+        keys = (keys[0], None, keys[1])  # add in 'target_account' key for ExchangeDAO
+        return super(OutExchangeHandler, self)._get_dao(*keys)
+
+    def repr(self, dao):
+        return dao.out_data_dict()
+    

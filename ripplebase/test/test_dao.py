@@ -313,8 +313,19 @@ class ExchangeDAOTest(DAOTest):
     data = [
         {'source_account': AccountDAOTest.data[0]['name'],
          'target_account': AccountDAOTest.data[2]['name'],
+         'unit': None,
          'rate': ExchangeRateDAOTest.data[0]['name'],
-         'client': client_data[0]['name']}
+         'client': client_data[0]['name']},
+        {'source_account': AccountDAOTest.data[0]['name'],
+         'target_account': None,
+         'unit': u'USD',
+         'rate': ExchangeRateDAOTest.data[0]['name'],
+         'client': client_data[0]['name']},
+        {'unit': u'CAD',
+         'source_account': None,
+         'target_account': AccountDAOTest.data[2]['name'],
+         'rate': ExchangeRateDAOTest.data[0]['name'],
+         'client': client_data[0]['name']},
     ]
     
     filter_kwargs = [
@@ -326,6 +337,16 @@ class ExchangeDAOTest(DAOTest):
         {'target_account': AccountDAOTest.data[2]['name']},
         {'source_account': AccountDAOTest.data[0]['name'],
          'target_account': AccountDAOTest.data[2]['name']},
+        {'unit': u'CAD'},
+        {'unit': u'USD'},
+        {'unit': None},
+        {'source_account': None},
+        {'target_account': None},
+        {'source_account': AccountDAOTest.data[0]['name'],
+         'target_account': None},
+        {'source_account': AccountDAOTest.data[0]['name'],
+         'target_account': None,
+         'unit': u'USD'},        
     ]
 
     @classmethod

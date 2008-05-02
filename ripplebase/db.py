@@ -94,7 +94,7 @@ class SimpleDAO(object):
 
     def __getattr__(self, attr):
         if attr in self.db_fields:
-            return getattr(self.data_obj, self.db_fields[attr])
+            return getattr(self.data_obj, self.db_fields[attr], None)
         else:
             raise AttributeError("'%s' object has no attribute '%s'." %
                                  (self.__class__, attr))
@@ -155,16 +155,18 @@ class DAO(SimpleDAO):
     m2m_daos = {}
 
     def _get_foreign_dao(self, dao_class, *keys):
-        return dao_class.get(*keys)
+        if keys[0] is not None:
+            return dao_class.get(*keys)
+        else:
+            return None
     
     def __setattr__(self, attr, value):
         if attr in self.fk_daos:
             # get FK DAO by API key
             dao = self._get_foreign_dao(self.fk_daos[attr], value)
             # set FK relation field to foreign data_obj
-            setattr(self.data_obj,
-                    self.db_fields[attr],
-                    dao.data_obj)
+            setattr(self.data_obj, self.db_fields[attr],
+                    getattr(dao, 'data_obj', None))
         elif attr in self.m2m_daos:
             dao_class = self.m2m_daos[attr]
             setattr(self.data_obj, attr, [])
@@ -203,11 +205,14 @@ class DAO(SimpleDAO):
         if fk_fields:
             # filter simple fields first
             simple_kwargs = kwargs.copy()
+            fk_fields_to_query = []
             for fk_field in fk_fields:
-                del simple_kwargs[fk_field]
+                if kwargs[fk_field] is not None:
+                    del simple_kwargs[fk_field]
+                    fk_fields_to_query.append(fk_field)
             q = super(DAO, cls).filter(**simple_kwargs)
             # process fk joins
-            for fk_field in fk_fields:
+            for fk_field in fk_fields_to_query:
                 dao_class = cls.fk_daos[fk_field]
                 # filter_db_field is like 'Client.name',
                 # where 'name' is the key for ClientDAO
@@ -266,7 +271,7 @@ class RippleDAO(DAO):
 
     def _get_foreign_dao(self, dao_class, *keys):
         "Be aware of foreign DAOs with Client fields."
-        if getattr(dao_class, 'has_client_as_key', False):
+        if getattr(dao_class, 'has_client_as_key', False) and keys[0] is not None:
             return dao_class.get(*keys, **dict(client=self.client))
         else:
             return super(RippleDAO, self)._get_foreign_dao(dao_class, *keys)

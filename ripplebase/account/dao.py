@@ -167,10 +167,11 @@ class ExchangeDAO(db.RippleDAO):
     db_fields = {
         'source_account': 'source_account',
         'target_account': 'target_account',
+        'unit': 'unit',
         'rate': None,  # mapped by ExchangeExchangeRate associaton/history table
     }
-    # FK keys/dual keys won't work if another DAO wants to reference this DAO
-    keys = ['source_account', 'target_account']
+    # FK/multi keys won't work if another DAO wants to reference this DAO
+    keys = ['source_account', 'target_account', 'unit']
     fk_daos = {
         'source_account': AccountDAO,
         'target_account': AccountDAO,
@@ -205,6 +206,21 @@ class ExchangeDAO(db.RippleDAO):
             raise ValueError('Rate field not implemented in filter.')
         return super(ExchangeDAO, cls).filter(**kwargs)
 
+    def thru_data_dict(self):
+        d = super(ExchangeDAO, self).data_dict()
+        del d['unit']
+        return d
+
+    def in_data_dict(self):
+        d = super(ExchangeDAO, self).data_dict()
+        del d['source_account']
+        return d
+
+    def out_data_dict(self):
+        d = super(ExchangeDAO, self).data_dict()
+        del d['target_account']
+        return d
+    
             
 class ExchangeRateDAO(db.RippleDAO):
     model = ExchangeRate

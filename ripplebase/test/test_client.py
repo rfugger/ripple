@@ -309,25 +309,25 @@ class ClientTest(unittest.TestCase):
                       'owner': 'guy'},
                      {u'address': u'other_address',
                       'owner': 'girl'}]
-        accounts = [{u'name': u'my_account',
+        accounts = [{u'name': u'acct1_girl',
                      u'owner': u'girl',
                      u'balance': D(u'0.00'),
                      u'upper_limit': D(u'100.00'),
                      u'lower_limit': D(u'-100.00'),
                      u'limits_expiry_time': None,
                      # the rest are for account request
-                     u'address': u'my_address',
-                     u'partner': u'other_address',
+                     u'address': u'other_address',
+                     u'partner': u'my_address',
                      u'note': u'Hey.'},
-                    {u'name': u'other_account',
+                    {u'name': u'acct2_girl',
                      u'owner': u'girl',
                      u'balance': D(u'0.00'),
                      u'upper_limit': D(u'100.00'),
                      u'lower_limit': D(u'-100.00'),
                      u'limits_expiry_time': None,
                      # the rest are for account request
-                     u'address': u'my_address',
-                     u'partner': u'other_address',
+                     u'address': u'other_address',
+                     u'partner': u'my_address',
                      u'note': u'Heya.'}]
         rate1 = {'name': u'USDCAD',
                  'value': D('1.0232'),
@@ -336,8 +336,8 @@ class ClientTest(unittest.TestCase):
                  'value': D('0.003943'),
                  'expiry_time': None}
 
-        exchange = {'source_account': u'my_account',
-                    'target_account': u'other_account',
+        exchange = {'source_account': u'acct1_girl',
+                    'target_account': u'acct2_girl',
                     'rate': rate1['name']}
 
         for address in addresses:
@@ -362,6 +362,75 @@ class ClientTest(unittest.TestCase):
         self.assertEquals(eers[0].rate.name, rate1['name'])
         self.assertEquals(eers[1].rate.name, rate2['name'])
         self.failUnless(eers[0].effective_time < eers[1].effective_time)
+        
+    def test_payment(self):
+        addresses = [{u'address': u'guy_address',
+                      'owner': 'guy'},
+                     {u'address': u'girl_address',
+                      'owner': 'girl'},
+                     {u'address': u'girl_address2',
+                      'owner': 'girl'}]
+        accounts = [{u'name': u'acct1_girl',
+                     u'owner': u'girl',
+                     u'balance': D(u'0.00'),
+                     u'upper_limit': D(u'100.00'),
+                     u'lower_limit': D(u'-100.00'),
+                     u'limits_expiry_time': None,
+                     # the rest are for account request
+                     u'address': u'girl_address',
+                     u'partner': u'guy_address',
+                     u'note': u'Hey.'},
+                    {u'name': u'acct2_girl',
+                     u'owner': u'girl',
+                     u'balance': D(u'0.00'),
+                     u'upper_limit': D(u'100.00'),
+                     u'lower_limit': D(u'-100.00'),
+                     u'limits_expiry_time': None,
+                     # the rest are for account request
+                     u'address': u'girl_address',
+                     u'partner': u'guy_address',
+                     u'note': u'Heya.'}]
+        partner_accts = [{u'name': u'acct1_guy',
+                          u'relationship': 1,  # educated guess here :)
+                          u'owner': u'guy',
+                          u'balance': D(u'0.00'),
+                          u'upper_limit': D(u'150.00'),
+                          u'lower_limit': D(u'-50.00'),
+                          u'limits_expiry_time': None,},
+                         {u'name': u'acct2_guy',
+                          u'relationship': 2,  # educated guess here :)
+                          u'owner': u'guy',
+                          u'balance': D(u'0.00'),
+                          u'upper_limit': D(u'150.00'),
+                          u'lower_limit': D(u'-50.00'),
+                          u'limits_expiry_time': None,}]
+        rate1 = {'name': u'USDCAD',
+                 'value': D('1.0232'),
+                 'expiry_time': None}
+        exchange = {'source_account': u'acct1_guy',
+                    'target_account': u'acct2_guy',
+                    'rate': rate1['name']}
+
+        payment = {'payer': 'girl_address',
+                   'recipient': 'girl_address2',
+                   'amount': D('10.00'),
+                   'amount_for_recipient': True,
+                   'units': 'CAD',
+                   'accounts': [{'name': 'acct2_girl', 'rate': D('1.123')}],
+                   'request_only': False}
+        
+        for address in addresses:
+            urlopen('/addresses/', address)
+        for account, partner_acct in zip(accounts, partner_accts):
+            urlopen('/accounts', account)
+            urlopen('/accounts', partner_acct)
+        urlopen('/addresses/girl_address',
+                {'accounts': [u'acct1_girl']})
+        urlopen('/addresses/girl_address2',
+                {'accounts': [u'acct2_girl']})
+        urlopen('/rates', rate1)
+        urlopen('/exchanges', exchange)
+
         
         
 def str_to_datetime(s):

@@ -30,7 +30,7 @@ class PaymentDAO(db.RippleDAO):
         'payer': 'payer',
         'recipient': 'recipient',
         'amount': 'amount',
-        'for_recipient': 'for_recipient',
+        'amount_for_recipient': 'amount_for_recipient',
         'units': 'units',
         'status': 'status',
         'accounts': None,  # custom field, (accountname, exchangerate) pairs

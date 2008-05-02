@@ -25,25 +25,19 @@ import sqlalchemy as sql
 from ripplebase import db
 from ripplebase.settings import PRECISION, SCALE
 
-# Payment status codes
-REQUESTED = 'RQ'
-PENDING = 'PE'
-COMPLETED = 'OK'
-CANCELLED = 'CA'
-REFUSED = 'RF'
-FAILED = 'FA'
-
 payment_table = sql.Table(
     'payment', db.meta,
     sql.Column('id', sql.Integer, primary_key=True),
-    sql.Column('date', sql.DateTime, nullable=False),
+    sql.Column('init_date', sql.DateTime, nullable=False,
+               default=sql.func.now()),
+    sql.Column('commit_date', sql.DateTime, nullable=True),
     sql.Column('payer_address_id', sql.Integer,
                sql.ForeignKey('address.id'), nullable=False),
     sql.Column('recipient_address_id', sql.Integer,
                sql.ForeignKey('address.id'), nullable=False),
     sql.Column('amount', sql.Numeric(PRECISION, SCALE), nullable=False),
-    sql.Column('for_recipient', sql.Boolean, nullable=False),
-    sql.Column('units', sql.Unicode(32), nullable=False),
+    sql.Column('amount_for_recipient', sql.Boolean, nullable=False),
+    sql.Column('units', sql.Unicode(32), nullable=True),
     sql.Column('status', sql.Unicode(2), nullable=False),
 )
 
