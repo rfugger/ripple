@@ -24,6 +24,9 @@ from ripplebase.account import resources as acct
 from ripplebase.payment import resources as pmt
 
 urls = (
+    (r'^/units/?$', acct.UnitListHandler),
+    (r'^/units/([^/]+)/?$', acct.UnitHandler),
+
     (r'^/addresses/?$', acct.AddressListHandler),
     (r'^/addresses/([^/]+)/?$', acct.AddressHandler),
 

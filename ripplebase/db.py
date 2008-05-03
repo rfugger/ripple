@@ -51,7 +51,9 @@ def reset(drop=True, init_data=True):
     "Recreate all tables."
     engine.echo = False
     # make sure tables are loaded into metadata
-    import ripplebase.account.tables  # *** payment tables later
+    import ripplebase.account.tables
+    import ripplebase.payment.tables
+    assert meta.tables != {}, "Make sure to import ripplebase.db, not just db."
     if drop:
         meta.drop_all(bind=engine)
     meta.create_all(bind=engine)
@@ -63,7 +65,12 @@ def reset(drop=True, init_data=True):
         test_client = Client()
         test_client.name=settings.TEST_CLIENT
         commit()
-
+        # *** also install default units
+        from ripplebase.account.dao import UnitDAO
+        UnitDAO.create(name=u'CAD')
+        UnitDAO.create(name=u'USD')
+        commit()
+        
 class SimpleDAO(object):
     """Base class for DAOs.  Handles mapping API fields to
     DB fields in the local object.

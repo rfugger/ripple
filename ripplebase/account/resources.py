@@ -24,6 +24,15 @@ from ripplebase.resource import *
 from ripplebase.account.dao import *
 
 
+class UnitListHandler(RippleObjectListHandler):
+    DAO = UnitDAO
+    required_fields = ('name',)
+
+class UnitHandler(RippleObjectHandler):
+    allowed_methods = ('GET', 'HEAD', 'DELETE')
+    DAO = UnitDAO
+
+    
 class AddressListHandler(RippleObjectListHandler):
     DAO = AddressDAO
     required_fields = ('address',)
@@ -37,12 +46,13 @@ class AddressHandler(RippleObjectHandler):
 account_request_fields = {
     'address': 'source_address',
     'partner': 'dest_address',
+    'unit': 'unit',
     'note': 'note',
 }
 
 class AccountListHandler(RippleObjectListHandler):
     DAO = AccountDAO
-    required_fields = ('name', 'balance',)
+    required_fields = ('name', 'balance', 'unit')
     optional_fields = ('owner', 'upper_limit', 'lower_limit',
                        'limits_expiry_time',
                        # these are for initial account only
@@ -62,7 +72,8 @@ class AccountListHandler(RippleObjectListHandler):
             req_dict = {'relationship': rel.id}
             for key, req_key in account_request_fields.items():
                 req_dict[req_key] = data_dict[key]
-                del data_dict[key]
+                if key != 'unit':
+                    del data_dict[key]
             req = AccountRequestDAO.create(**req_dict)
             data_dict['is_active'] = False
         else:  # confirming account by creating dual account

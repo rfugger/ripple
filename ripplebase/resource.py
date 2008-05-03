@@ -93,8 +93,9 @@ class JSONSiteResource(SiteResource):
             if settings.DEBUG: traceback.print_exc()
             request.setResponseCode(http.INTERNAL_SERVER_ERROR)
             body = str(e)
+        else:
+            db.commit()
         # close out db session -- very important with threads
-        db.commit()
         db.close()
         if body not in (None, ''):
             json_body = encode_response(body)

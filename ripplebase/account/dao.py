@@ -29,6 +29,13 @@ from ripplebase import db
 from ripplebase.account.tables import *
 
 
+class UnitDAO(db.RippleDAO):
+    model = Unit
+    db_fields = {
+        'name': 'name'
+    }
+    keys = ['name']
+
 class RelationshipDAO(db.RippleDAO):
     model = Relationship
     db_fields = {
@@ -44,6 +51,7 @@ class AccountDAO(db.RippleDAO):
         'owner': 'owner',
         'is_active': 'is_active',
         'balance': 'balance',
+        'unit': 'unit',
         'upper_limit': None,  # maps to AccountLimits.upper_limit
         'lower_limit': None,  # maps to AccountLimits.lower_limit
         'limits_effective_time': None,  # maps to AccountLimits.effective_time
@@ -52,6 +60,7 @@ class AccountDAO(db.RippleDAO):
     keys = ['name']
     fk_daos = {
         'relationship': RelationshipDAO,
+        'unit': UnitDAO,
     }
     has_client_field = True
     has_client_as_key = True
@@ -152,6 +161,7 @@ class AccountRequestDAO(db.RippleDAO):
         'relationship': 'relationship',
         'source_address': 'source_address',
         'dest_address': 'dest_address',
+        'unit': 'unit',
         'note': 'note',
     }
     # FK key won't work if another DAO wants to reference this DAO
@@ -160,6 +170,7 @@ class AccountRequestDAO(db.RippleDAO):
         'relationship': RelationshipDAO,
         'source_address': AddressDAO,
         'dest_address': AddressDAO,
+        'unit': UnitDAO,
     }
     
 class ExchangeDAO(db.RippleDAO):
@@ -175,6 +186,7 @@ class ExchangeDAO(db.RippleDAO):
     fk_daos = {
         'source_account': AccountDAO,
         'target_account': AccountDAO,
+        'unit': UnitDAO,
     }
 
     def _get_active_exchange_exchange_rate(self):

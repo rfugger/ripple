@@ -32,6 +32,12 @@ client_table = sql.Table(
     # *** need login/auth data here
 )
 
+unit_table = sql.Table(
+    'unit', db.meta,
+    sql.Column('id', sql.Integer, primary_key=True),
+    sql.Column('name', sql.Unicode(256), nullable=False, unique=True),
+)
+
 address_table = sql.Table(
     'address', db.meta,
     sql.Column('id', sql.Integer, primary_key=True),
@@ -61,6 +67,8 @@ account_table = sql.Table(
     sql.Column('is_active', sql.Boolean, nullable=False, default=True),
     sql.Column('balance', sql.Numeric(PRECISION, SCALE),
                nullable=False),
+    sql.Column('unit_id', sql.Integer,
+               sql.ForeignKey('unit.id'), nullable=False),    
     sql.UniqueConstraint('name', 'client_id'),
 )
 
@@ -99,6 +107,8 @@ account_request_table = sql.Table(
                sql.ForeignKey('address.id'), nullable=False),
     sql.Column('dest_address_id', sql.Integer,
                sql.ForeignKey('address.id'), nullable=False),
+    sql.Column('unit_id', sql.Integer,
+               sql.ForeignKey('unit.id'), nullable=False),    
     sql.Column('note', sql.Text, nullable=False)
 )
 
@@ -115,7 +125,8 @@ exchange_table = sql.Table(
                sql.ForeignKey('account.id'), nullable=True),
     sql.Column('target_account_id', sql.Integer,
                sql.ForeignKey('account.id'), nullable=True),
-    sql.Column('unit', sql.Unicode(32), nullable=True)
+    sql.Column('unit_id', sql.Integer,
+               sql.ForeignKey('unit.id'), nullable=True),
     # *** maybe cache current rate value here for easy access?
 )
 
@@ -156,3 +167,4 @@ exchange_rate_value_table = sql.Table(
     sql.Column('value', sql.Numeric(PRECISION, SCALE),
                nullable=False),
 )
+

@@ -31,6 +31,10 @@ class Client(object):
     pass
 db.mapper(Client, client_table)
 
+class Unit(object):
+    pass
+db.mapper(Unit, unit_table)
+
 class Address(object):
     pass
 class Relationship(object):
@@ -49,6 +53,7 @@ db.mapper(Relationship, relationship_table)
 db.mapper(Account, account_table, properties={
     'relationship': orm.relation(Relationship),
     'client': orm.relation(Client),
+    'unit': orm.relation(Unit),
     # *** eager load active limits
     })
 db.mapper(AccountLimits, account_limits_table, properties={
@@ -62,7 +67,8 @@ db.mapper(AccountRequest, account_request_table, properties={
     'source_address': orm.relation(Address, primaryjoin=
         account_request_table.c.source_address_id==address_table.c.id),
     'dest_address': orm.relation(Address, primaryjoin=
-        account_request_table.c.dest_address_id==address_table.c.id)})
+        account_request_table.c.dest_address_id==address_table.c.id),
+    'unit': orm.relation(Unit),})
 
 class Exchange(object):
     pass
@@ -78,6 +84,7 @@ db.mapper(Exchange, exchange_table, properties={
         exchange_table.c.source_account_id==account_table.c.id),
     'target_account': orm.relation(Account, primaryjoin=
         exchange_table.c.target_account_id==account_table.c.id),
+    'unit': orm.relation(Unit),
     # *** eager load active exchange rate value?
     })
 

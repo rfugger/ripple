@@ -60,7 +60,7 @@ def urlopen(path, data=None, code=http.OK):
                 # *** how to capture response on code other than 200?
                 #     maybe content is stored in HTTPError object?
                 break
-            print he.read()  # display body
+            print json.decode(he.read())  # display body
             raise
         except urllib.URLError, ue:
             if ue.reason.args[0] in (10061, 111):  # connection refused
@@ -112,6 +112,14 @@ class ClientTest(unittest.TestCase):
         urlopen(update_url, new_data)
         orig_data.update(new_data)
         self.check_data(check_url, orig_data, process_recv_data)
+
+    def test_unit(self):
+        unit_dict1 = {'name': u'ABC'}
+        urlopen('/units/', unit_dict1)
+        recv_data = urlopen('/units')
+        self.failUnless(unit_dict1 in recv_data)  # may be other units already
+        self.check_data('/units/%s' % unit_dict1['name'],
+                        unit_dict1)
         
     def test_address(self):
          address_dict = {'address': u'my_address',
@@ -164,6 +172,7 @@ class ClientTest(unittest.TestCase):
         init_acct = {u'name': u'my_account',
                      u'owner': u'blubby blub',
                      u'balance': D(u'0.00'),
+                     u'unit': u'CAD',
                      u'upper_limit': D(u'100.00'),
                      u'lower_limit': D(u'-100.00'),
                      u'limits_expiry_time': None,
@@ -175,6 +184,7 @@ class ClientTest(unittest.TestCase):
                         u'relationship': None,  # set in code once known
                         u'owner': u'noodie nood',
                         u'balance': D(u'0.00'),
+                        u'unit': u'CAD',
                         u'upper_limit': D(u'150.00'),
                         u'lower_limit': D(u'-50.00'),
                         u'limits_expiry_time': None,}
@@ -189,7 +199,8 @@ class ClientTest(unittest.TestCase):
         from ripplebase.account.resources import account_request_fields
         for field, req_field in account_request_fields.items():
             req_data[req_field] = init_acct[field]
-            del expected_data[field]
+            if field != 'unit':
+                del expected_data[field]
         req_data['relationship'] = recv_data[0]['relationship']
         expected_data['relationship'] = req_data['relationship']
         expected_data['is_active'] = False
@@ -312,6 +323,7 @@ class ClientTest(unittest.TestCase):
         accounts = [{u'name': u'acct1_girl',
                      u'owner': u'girl',
                      u'balance': D(u'0.00'),
+                     u'unit': u'CAD',
                      u'upper_limit': D(u'100.00'),
                      u'lower_limit': D(u'-100.00'),
                      u'limits_expiry_time': None,
@@ -322,6 +334,7 @@ class ClientTest(unittest.TestCase):
                     {u'name': u'acct2_girl',
                      u'owner': u'girl',
                      u'balance': D(u'0.00'),
+                     u'unit': u'USD',
                      u'upper_limit': D(u'100.00'),
                      u'lower_limit': D(u'-100.00'),
                      u'limits_expiry_time': None,
@@ -373,6 +386,7 @@ class ClientTest(unittest.TestCase):
         accounts = [{u'name': u'acct1_girl',
                      u'owner': u'girl',
                      u'balance': D(u'0.00'),
+                     u'unit': u'CAD',
                      u'upper_limit': D(u'100.00'),
                      u'lower_limit': D(u'-100.00'),
                      u'limits_expiry_time': None,
@@ -383,6 +397,7 @@ class ClientTest(unittest.TestCase):
                     {u'name': u'acct2_girl',
                      u'owner': u'girl',
                      u'balance': D(u'0.00'),
+                     u'unit': u'USD',
                      u'upper_limit': D(u'100.00'),
                      u'lower_limit': D(u'-100.00'),
                      u'limits_expiry_time': None,
@@ -394,6 +409,7 @@ class ClientTest(unittest.TestCase):
                           u'relationship': 1,  # educated guess here :)
                           u'owner': u'guy',
                           u'balance': D(u'0.00'),
+                          u'unit': u'CAD',
                           u'upper_limit': D(u'150.00'),
                           u'lower_limit': D(u'-50.00'),
                           u'limits_expiry_time': None,},
@@ -401,6 +417,7 @@ class ClientTest(unittest.TestCase):
                           u'relationship': 2,  # educated guess here :)
                           u'owner': u'guy',
                           u'balance': D(u'0.00'),
+                          u'unit': u'USD',
                           u'upper_limit': D(u'150.00'),
                           u'lower_limit': D(u'-50.00'),
                           u'limits_expiry_time': None,}]

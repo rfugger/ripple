@@ -38,6 +38,7 @@ class DAOTest(unittest.TestCase):
             raise unittest.SkipTest('Skipping superclass test.')
         db.reset(init_data=False)
         create_client_data()
+        create_unit_data()
 
     def tearDown(self):
         db.close()
@@ -137,7 +138,16 @@ def create_client_data():
     for client in client_data:
         c = Client()
         c.name = client['name']
-    db.flush()
+    db.commit()
+
+unit_data = [
+    {'name': u'CAD'},
+    {'name': u'USD'},
+]
+    
+def create_unit_data():
+    for unit in unit_data:
+        UnitDAO.create(**unit)
     db.commit()
 
     
@@ -154,7 +164,8 @@ class AccountDAOTest(DAOTest):
          'lower_limit': D('-50.00'),
          'limits_effective_time': datetime(2008, 3, 10, 23, 21, 23, 945000),
          'limits_expiry_time': datetime(2008, 4, 10, 23, 21, 23, 945000),
-         'client': client_data[0]['name']},
+         'client': client_data[0]['name'],
+         'unit': u'CAD'},
 
         {'name': u'other_account',
          'relationship': 0,
@@ -165,7 +176,8 @@ class AccountDAOTest(DAOTest):
          'lower_limit': D('-40.00'),
          'limits_effective_time': datetime(2007, 3, 10, 23, 21, 23, 945000),
          'limits_expiry_time': datetime(2008, 4, 20, 23, 21, 23, 945000),
-         'client': client_data[1]['name']},
+         'client': client_data[1]['name'],
+         'unit': u'CAD'},
 
         {'name': u'good_account',
          'relationship': 1,
@@ -176,7 +188,8 @@ class AccountDAOTest(DAOTest):
          'lower_limit': D('-41.00'),
          'limits_effective_time': datetime(2007, 3, 1, 23, 21, 23, 945000),
          'limits_expiry_time': datetime(2008, 4, 30, 23, 21, 23, 945000),
-         'client': client_data[0]['name']},
+         'client': client_data[0]['name'],
+         'unit': u'USD'},
     ]
 
     filter_kwargs = [
@@ -187,6 +200,7 @@ class AccountDAOTest(DAOTest):
         {'is_active': False, 'name': u'my_account',
          'owner': u'some guy'},
         {'client': client_data[0]['name']},
+        {'unit': u'CAD'},
     ]
     
     @classmethod
@@ -267,6 +281,7 @@ class AccountRequestDAOTest(DAOTest):
         {'relationship': 0,  # get id later
          'source_address': u'address0',
          'dest_address': u'address1',
+         'unit': u'CAD',
          'note': u"Hey\n\nwhat's up?"},
     ]
 
