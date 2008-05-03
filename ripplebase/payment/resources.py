@@ -41,6 +41,8 @@ class PaymentListHandler(RippleObjectListHandler):
         if request_only:
             data_dict['status'] = REQUESTED
         else:
+            # *** this is wrong - recipient must approve payment when
+            # amount isn't defined on recipient end.
             payer_client_name = AddressDAO.get(data_dict['payer']).client
             if payer_client_name == self.client.name:
                 data_dict['status'] = APPROVED

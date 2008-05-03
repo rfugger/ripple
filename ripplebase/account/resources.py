@@ -64,7 +64,7 @@ class AccountListHandler(RippleObjectListHandler):
         if 'relationship' not in data_dict:
             for field in ('address', 'partner'):
                 if field not in data_dict:
-                    raise ValueError("%s is a required field." % field)
+                    raise ValueError("'%s' is a required field." % field)
             # create relationship and account request
             acct_address = data_dict['address']
             rel = RelationshipDAO.create()
@@ -108,58 +108,93 @@ class ExchangeRateListHandler(RippleObjectListHandler):
 class ExchangeRateHandler(RippleObjectHandler):
     DAO = ExchangeRateDAO
     mutable_fields = ('name', 'value', 'expiry_time')
+
     
-class ThruExchangeListHandler(RippleObjectListHandler):
+class ExchangeListHandler(RippleObjectListHandler):
     DAO = ExchangeDAO
-    required_fields = ('source_account', 'target_account', 'rate')
+    required_fields = ('from', 'to', 'rate')
+    dao_fields = {}  # define in subclasses
+    unused_dao_field = None
+    
+    def _convert_to_dao_fields(self, **kwargs):
+        d = {}
+        for api_field, dao_field in self.dao_fields.items():
+            if api_field in kwargs:
+                d[dao_field] = kwargs[api_field]
+        return d
+    
+    def create(self, data_dict):
+        d = self._convert_to_dao_fields(**data_dict)
+        return super(ExchangeListHandler, self).create(d)
+
+    def filter(self, **kwargs):
+        kwargs = self._convert_to_dao_fields(**kwargs)
+        kwargs[self.unused_dao_field] = None
+        return super(ExchangeListHandler, self).filter(**kwargs)
 
     def repr(self, dao):
-        return dao.thru_data_dict()
+        data_dict = dao.data_dict()
+        d = {}
+        for api_field, dao_field in self.dao_fields.items():
+            d[api_field] = data_dict[dao_field]
+        return d
 
-class ThruExchangeHandler(RippleObjectHandler):
+class ExchangeHandler(RippleObjectHandler):
     DAO = ExchangeDAO
     mutable_fields = ('rate',)
-
+    dao_fields = {}
+    
+    def repr(self, dao):
+        data_dict = dao.data_dict()
+        d = {}
+        for api_field, dao_field in self.dao_fields.items():
+            d[api_field] = data_dict[dao_field]
+        return d
+    
+class ThruExchangeListHandler(ExchangeListHandler):
+    dao_fields = {
+        'from': 'source_account',
+        'to': 'target_account',
+        'rate': 'rate',
+    }
+    unused_dao_field = 'unit'
+    
+class ThruExchangeHandler(ExchangeHandler):
+    dao_fields = ThruExchangeListHandler.dao_fields
+    
     def _get_dao(self, *keys):
         keys = keys + (None,)  # add in 'unit' key for ExchangeDAO
         return super(ThruExchangeHandler, self)._get_dao(*keys)
     
-    def repr(self, dao):
-        return dao.thru_data_dict()
+class InExchangeListHandler(ExchangeListHandler):
+    dao_fields = {
+        'from': 'source_account',
+        'to': 'unit',
+        'rate': 'rate',
+    }
+    unused_dao_field = 'target_account'
     
-class InExchangeListHandler(RippleObjectListHandler):
-    DAO = ExchangeDAO
-    required_fields = ('unit', 'target_account', 'rate')
-
-    def repr(self, dao):
-        return dao.in_data_dict()
-
-class InExchangeHandler(RippleObjectHandler):
-    DAO = ExchangeDAO
-    mutable_fields = ('rate',)
-
-    def _get_dao(self, *keys):
-        keys = (None,) + keys  # add in 'source_account' key for ExchangeDAO
-        return super(InExchangeHandler, self)._get_dao(*keys)
-
-    def repr(self, dao):
-        return dao.in_data_dict()
-    
-class OutExchangeListHandler(RippleObjectListHandler):
-    DAO = ExchangeDAO
-    required_fields = ('unit', 'source_account', 'rate')
-
-    def repr(self, dao):
-        return dao.out_data_dict()
-
-class OutExchangeHandler(RippleObjectHandler):
-    DAO = ExchangeDAO
-    mutable_fields = ('rate',)
+class InExchangeHandler(ExchangeHandler):
+    dao_fields = InExchangeListHandler.dao_fields
 
     def _get_dao(self, *keys):
         keys = (keys[0], None, keys[1])  # add in 'target_account' key for ExchangeDAO
+        return super(InExchangeHandler, self)._get_dao(*keys)
+    
+class OutExchangeListHandler(ExchangeListHandler):
+    dao_fields = {
+        'from': 'unit',
+        'to': 'target_account',
+        'rate': 'rate',
+    }
+    unused_dao_field = 'source_account'
+    
+    
+class OutExchangeHandler(ExchangeHandler):
+    dao_fields = OutExchangeListHandler.dao_fields
+
+    def _get_dao(self, *keys):
+        keys = (None, keys[1], keys[0])  # add in 'source_account' key for ExchangeDAO
         return super(OutExchangeHandler, self)._get_dao(*keys)
 
-    def repr(self, dao):
-        return dao.out_data_dict()
     

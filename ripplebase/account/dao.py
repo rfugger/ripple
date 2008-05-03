@@ -218,21 +218,6 @@ class ExchangeDAO(db.RippleDAO):
             raise ValueError('Rate field not implemented in filter.')
         return super(ExchangeDAO, cls).filter(**kwargs)
 
-    def thru_data_dict(self):
-        d = super(ExchangeDAO, self).data_dict()
-        del d['unit']
-        return d
-
-    def in_data_dict(self):
-        d = super(ExchangeDAO, self).data_dict()
-        del d['source_account']
-        return d
-
-    def out_data_dict(self):
-        d = super(ExchangeDAO, self).data_dict()
-        del d['target_account']
-        return d
-    
             
 class ExchangeRateDAO(db.RippleDAO):
     model = ExchangeRate

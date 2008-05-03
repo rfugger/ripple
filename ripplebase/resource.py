@@ -179,11 +179,11 @@ class ObjectListHandler(RequestHandler):
     def validate(self, data_dict):
         for field in self.required_fields:
             if field not in data_dict:
-                raise ValueError("%s is a required field." % field)
+                raise ValueError("'%s' is a required field." % field)
         all_fields = self.required_fields + self.optional_fields
         for field in data_dict:
             if field not in all_fields:
-                raise ValueError("%s is not a recognized field." % field)
+                raise ValueError("'%s' is not a recognized field." % field)
     
     def filter(self, **kwargs):
         for obj in self.DAO.filter(**kwargs):
@@ -231,7 +231,7 @@ class ObjectHandler(RequestHandler):
     def validate(self, data_dict):
         for field in data_dict:
             if field not in self.mutable_fields:
-                raise ValueError("%s not a mutable field." % field)
+                raise ValueError("'%s' not a mutable field." % field)
             
 def de_unicodify_keys(d):
     "Makes dict keys regular strings so it can be used for kwargs."

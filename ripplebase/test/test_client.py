@@ -342,17 +342,23 @@ class ClientTest(unittest.TestCase):
                      u'address': u'other_address',
                      u'partner': u'my_address',
                      u'note': u'Heya.'}]
-        rate1 = {'name': u'USDCAD',
+        rate1 = {'name': u'CADUSD',
                  'value': D('1.0232'),
                  'expiry_time': None}
         rate2 = {'name': u'gAuhrs',
                  'value': D('0.003943'),
                  'expiry_time': None}
 
-        exchange = {'source_account': u'acct1_girl',
-                    'target_account': u'acct2_girl',
+        exchange = {'from': u'acct1_girl',
+                    'to': u'acct2_girl',
                     'rate': rate1['name']}
-
+        in_exchange = {'from': u'acct1_girl',
+                       'to': u'USD',
+                       'rate': rate1['name']}
+        out_exchange = {'from': u'CAD',
+                        'to': u'acct2_girl',
+                        'rate': rate1['name']}
+        
         for address in addresses:
             urlopen('/addresses/', address)
         for account in accounts:
@@ -362,19 +368,32 @@ class ClientTest(unittest.TestCase):
 
         urlopen('/exchanges', exchange)
         self.check_data('/exchanges/', [exchange])
-        self.check_data('/exchanges/%s/%s' % (exchange['source_account'],
-                                              exchange['target_account']),
+        self.check_data('/exchanges/%s/%s' % (exchange['from'],
+                                              exchange['to']),
                         exchange)
 
         # alter rate, check history is stored
         time.sleep(1)  # make sure time is different
-        self.update_and_check('/exchanges/%s/%s' % (exchange['source_account'],
-                                                    exchange['target_account']),
+        self.update_and_check('/exchanges/%s/%s' % (exchange['from'],
+                                                    exchange['to']),
                               {'rate': rate2['name']})
         eers = list(db.query(ExchangeExchangeRate).order_by('effective_time'))
         self.assertEquals(eers[0].rate.name, rate1['name'])
         self.assertEquals(eers[1].rate.name, rate2['name'])
         self.failUnless(eers[0].effective_time < eers[1].effective_time)
+
+        # try some in & out exchanges
+        urlopen('/inexchanges', in_exchange)
+        self.check_data('/inexchanges/', [in_exchange])
+        self.check_data('/inexchanges/%s/%s' % (in_exchange['from'],
+                                                in_exchange['to']),
+                        in_exchange)
+        
+        urlopen('/outexchanges', out_exchange)
+        self.check_data('/outexchanges/', [out_exchange])
+        self.check_data('/outexchanges/%s/%s' % (out_exchange['from'],
+                                                 out_exchange['to']),
+                        out_exchange)
         
     def test_payment(self):
         addresses = [{u'address': u'guy_address',
