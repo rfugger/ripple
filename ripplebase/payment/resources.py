@@ -24,27 +24,32 @@ from ripplebase.payment.dao import *
 from ripplebase.account.dao import AddressDAO
 
 # Payment status codes
-REQUESTED = 'RQ'
-APPROVED = 'AP'
-COMPLETED = 'OK'
-CANCELLED = 'CA'
-REFUSED = 'RF'
-FAILED = 'FA'
+REQUESTED = u'RQ'
+APPROVED = u'AP'
+COMPLETED = u'OK'
+CANCELLED = u'CA'
+REFUSED = u'RF'
+FAILED = u'FA'
 
 
 class PaymentListHandler(RippleObjectListHandler):
     DAO = PaymentDAO
-
+    required_fields = ('payer', 'recipient', 'amount', 'amount_for_recipient',
+                       'units', 'is_request')
+    
     def create(self, data_dict):
-        request_only = data_dict['request_only']
-        del data_dict['request_only']
-        if request_only:
+        if 'is_request' in data_dict:
+            is_request = data_dict['is_request']
+            del data_dict['is_request']
+        else:
+            is_request = False
+        if is_request:
             data_dict['status'] = REQUESTED
         else:
             # *** this is wrong - recipient must approve payment when
             # amount isn't defined on recipient end.
-            payer_client_name = AddressDAO.get(data_dict['payer']).client
-            if payer_client_name == self.client.name:
+            payer_client = AddressDAO.get(data_dict['payer']).client
+            if payer_client.name == self.client.name:
                 data_dict['status'] = APPROVED
             else:
                 raise ValueError("Payment from another client must be requested.")

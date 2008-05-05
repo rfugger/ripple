@@ -25,7 +25,7 @@ from ripplebase.account.dao import AddressDAO
 
 class PaymentDAO(db.RippleDAO):
     model = Payment
-    fields = {
+    db_fields = {
         'id': 'id',
         'payer': 'payer',
         'recipient': 'recipient',
@@ -33,7 +33,6 @@ class PaymentDAO(db.RippleDAO):
         'amount_for_recipient': 'amount_for_recipient',
         'units': 'units',
         'status': 'status',
-        'accounts': None,  # custom field, (accountname, exchangerate) pairs
     }
     keys = ['id']
     fk_daos = {
@@ -41,12 +40,10 @@ class PaymentDAO(db.RippleDAO):
         'recipient': AddressDAO,
     }
 
-    # *** handle accounts field -- different for payer and recipient
-
 class PaymentPathDAO(db.RippleDAO):
     "For payer info only, before approving payment."
     model = PaymentPath
-    fields = {
+    db_fields = {
         'payment': 'payment',
         'paying_account': None,  # gotten from first PaymentLink
         'payer_amount': 'payer_amount',

@@ -35,12 +35,6 @@ db.mapper(Payment, payment_table, properties={
     'recipient': orm.relation(Address, primaryjoin=
         payment_table.c.recipient_address_id==address_table.c.id)})
 
-class PaymentAccount(object):
-    pass
-db.mapper(PaymentAccount, payment_account_table, properties={
-    'payment': orm.relation(Payment),
-    'account': orm.relation(Account)})
-
 class PaymentPath(object):
     pass
 db.mapper(PaymentPath, payment_path_table, properties={

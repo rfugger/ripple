@@ -440,20 +440,31 @@ class ClientTest(unittest.TestCase):
                           u'upper_limit': D(u'150.00'),
                           u'lower_limit': D(u'-50.00'),
                           u'limits_expiry_time': None,}]
-        rate1 = {'name': u'USDCAD',
-                 'value': D('1.0232'),
-                 'expiry_time': None}
-        exchange = {'source_account': u'acct1_guy',
-                    'target_account': u'acct2_guy',
-                    'rate': rate1['name']}
+        rates = [{'name': u'USDCAD',
+                  'value': D('1.0232'),
+                  'expiry_time': None},
+                 {'name': u'CADUSD',
+                  'value': D('0.9985'),
+                  'expiry_time': None},
+                 {'name': u'identity',
+                  'value': D('1.0'),
+                  'expiry_time': None}]
+        exchange = {'from': u'acct1_guy',
+                    'to': u'acct2_guy',
+                    'rate': u'USDCAD'}
+        inexchange = {'from': u'acct2_girl',
+                      'to': u'CAD',
+                      'rate': u'CADUSD'}
+        outexchange = {'from': u'CAD',
+                       'to': u'acct1_girl',
+                       'rate': u'identity'}
 
         payment = {'payer': 'girl_address',
                    'recipient': 'girl_address2',
                    'amount': D('10.00'),
                    'amount_for_recipient': True,
                    'units': 'CAD',
-                   'accounts': [{'name': 'acct2_girl', 'rate': D('1.123')}],
-                   'request_only': False}
+                   'is_request': False}
         
         for address in addresses:
             urlopen('/addresses/', address)
@@ -464,9 +475,13 @@ class ClientTest(unittest.TestCase):
                 {'accounts': [u'acct1_girl']})
         urlopen('/addresses/girl_address2',
                 {'accounts': [u'acct2_girl']})
-        urlopen('/rates', rate1)
+        for rate in rates:
+            urlopen('/rates', rate)
         urlopen('/exchanges', exchange)
+        urlopen('/inexchanges', inexchange)
+        urlopen('/outexchanges', outexchange)
 
+        urlopen('/payments', payment)
         
         
 def str_to_datetime(s):

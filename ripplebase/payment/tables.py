@@ -41,18 +41,6 @@ payment_table = sql.Table(
     sql.Column('status', sql.Unicode(2), nullable=False),
 )
 
-payment_account_table = sql.Table(
-    'payment_account', db.meta,
-    sql.Column('id', sql.Integer, primary_key=True),
-    sql.Column('payment_id', sql.Integer,
-               sql.ForeignKey('payment.id'), nullable=False),
-    sql.Column('account_id', sql.Integer,
-               sql.ForeignKey('account.id'), nullable=False),
-    sql.Column('is_outgoing', sql.Boolean, nullable=False),
-    sql.Column('exchange_rate', sql.Numeric(PRECISION, SCALE), nullable=False),
-    sql.UniqueConstraint('payment_id', 'account_id'),
-)
-
 payment_path_table = sql.Table(
     'payment_path', db.meta,
     sql.Column('id', sql.Integer, primary_key=True),

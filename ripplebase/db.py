@@ -283,6 +283,11 @@ class RippleDAO(DAO):
         else:
             return super(RippleDAO, self)._get_foreign_dao(dao_class, *keys)
 
+    def __getattr__(self, attr):
+        if attr == 'client':
+            return self.data_obj.client
+        else:
+            return super(RippleDAO, self).__getattr__(attr)
 
 class APIQuery(object):
     """Wrapper for SQLAlchemy Query, returns DAO objects
