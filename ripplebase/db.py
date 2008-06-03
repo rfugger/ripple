@@ -33,7 +33,8 @@ meta = MetaData()
 engine = create_engine(settings.DB_CONNECT_STR, echo=DB_ECHO)
 session = scoped_session(sessionmaker(bind=engine,
                                       autoflush=False,
-                                      transactional=True))
+                                      autocommit=False,
+                                      autoexpire=False))
 mapper = session.mapper
 
 SESSION_METHODS = (
