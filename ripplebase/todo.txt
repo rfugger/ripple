@@ -4,8 +4,6 @@ Ripplebase To Do
 Client API
 ----------
 
-o Make 404 Not Found and 500 Server Error pages return valid JSON.
-
 o Copy json module from ripplebase_old django stuff
 
 o Do db-accessing work in thread

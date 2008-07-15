@@ -88,11 +88,15 @@ class JSONSiteResource(SiteResource):
         except Http404, h:
             if settings.DEBUG: traceback.print_exc()
             request.setResponseCode(http.NOT_FOUND)
-            body = str(h)
+            request.setHeader("Content-type",
+                          'application/json; charset=utf-8')
+            body = {'error': str(h)}
         except Exception, e:  # *** this might catch too much
             if settings.DEBUG: traceback.print_exc()
             request.setResponseCode(http.INTERNAL_SERVER_ERROR)
-            body = str(e)
+            request.setHeader("Content-type",
+                          'application/json; charset=utf-8')
+            body = {'error': str(e)}
         else:
             db.commit()
         # close out db session -- very important with threads
