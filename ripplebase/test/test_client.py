@@ -54,13 +54,10 @@ def urlopen(path, data=None, code=http.OK):
             response = urllib.urlopen(req)
             break
         except urllib.HTTPError, he:
-            # anything but 200 OK raises HTTPError (!?)
-            # need to catch desired response code here
+            # anything but 200 OK raises HTTPError
+            # so look for desired response code here
             if he.code == code:
-                # *** how to capture response on code other than 200?
-                #     maybe content is stored in HTTPError object?
-                break
-            print json.decode(he.read())  # display body
+                return json.decode(he.read())
             raise
         except urllib.URLError, ue:
             if ue.reason.args[0] in (10061, 111):  # connection refused
@@ -93,8 +90,12 @@ class ClientTest(unittest.TestCase):
                 subprocess.Popen(['kill', str(self.server.pid)])
 
     def test_bad_requests(self):
-        urlopen('/abcdef', code=http.NOT_FOUND)
-        urlopen('/addresses', {u'abcdef': u'mung'}, code=http.INTERNAL_SERVER_ERROR)
+        recv_data = urlopen('/abcdef', code=http.NOT_FOUND)
+        self.failUnless('error' in recv_data)
+        self.assertEquals(recv_data[ 'error' ], "No resource at '/abcdef'.")
+        recv_data = urlopen('/addresses', {u'abcdef': u'mung'}, code=http.INTERNAL_SERVER_ERROR)
+        self.failUnless('error' in recv_data)
+        self.assertEquals(recv_data[ 'error' ], "'address' is a required field.")
                 
     def check_data(self, url, expected_data, process_recv_data=None):
         recv_data = urlopen(url)
