@@ -73,6 +73,8 @@ class SiteResource(resource.Resource):
 class JSONSiteResource(SiteResource):
     "Automatically handles JSON encoding and decoding and headers."
     def render(self, request):
+        request.setHeader("Content-type",
+                      'application/json; charset=utf-8')
         try:
             # handle incoming data
             if settings.DEBUG: print '\n', request.path
@@ -82,20 +84,14 @@ class JSONSiteResource(SiteResource):
                 if settings.DEBUG: print content
             if settings.DEBUG: print db.session
             # handle outgoing data
-            request.setHeader("Content-type",
-                          'application/json; charset=utf-8')
             body = SiteResource.render(self, request)
         except Http404, h:
             if settings.DEBUG: traceback.print_exc()
             request.setResponseCode(http.NOT_FOUND)
-            request.setHeader("Content-type",
-                          'application/json; charset=utf-8')
             body = {'error': str(h)}
         except Exception, e:  # *** this might catch too much
             if settings.DEBUG: traceback.print_exc()
             request.setResponseCode(http.INTERNAL_SERVER_ERROR)
-            request.setHeader("Content-type",
-                          'application/json; charset=utf-8')
             body = {'error': str(e)}
         else:
             db.commit()
